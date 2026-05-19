@@ -52,7 +52,9 @@ export interface CityForecast {
 }
 
 const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
-const MODELS = ['graphcast', 'gfs_seamless'] as const;
+// graphcast was retired from Open-Meteo in 2025; ecmwf_ifs025 is the
+// current high-res ECMWF model and gfs_seamless is the NOAA fallback.
+const MODELS = ['ecmwf_ifs025', 'gfs_seamless'] as const;
 const BASELINE_SIGMA_F = 1.5;
 const BASELINE_PRECIP_SIGMA_MM = 0.5;
 

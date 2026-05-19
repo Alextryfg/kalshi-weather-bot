@@ -20,6 +20,8 @@ export interface GateInput {
   cfg: BotConfig;
   market: KalshiMarket;
   book: BookSummary;
+  /** Which side the bot intends to buy. */
+  side: 'yes' | 'no';
   /** Recent mid-prices (cents) for this ticker over the past hour, newest last. */
   recentMidsCents: number[];
   exposure: ExposureSnapshot;
@@ -35,10 +37,13 @@ export interface GateResult {
 export function checkRiskGates(g: GateInput): GateResult {
   const reasons: string[] = [];
 
-  // Gate 1: liquidity
-  if (g.book.topDepthMin < g.cfg.minOrderbookDepth) {
+  // Gate 1: liquidity — check the side we're actually buying into
+  // For YES: we need NO-side depth (they're our counterparty)
+  // For NO:  we need YES-side depth (they're our counterparty)
+  const relevantDepth = g.side === 'yes' ? g.book.noBidSize : g.book.yesBidSize;
+  if (relevantDepth < g.cfg.minOrderbookDepth) {
     reasons.push(
-      `gate1_liquidity: top-of-book depth ${g.book.topDepthMin} < ${g.cfg.minOrderbookDepth}`,
+      `gate1_liquidity: counterparty depth ${relevantDepth} < ${g.cfg.minOrderbookDepth}`,
     );
   }
 

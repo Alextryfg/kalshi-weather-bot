@@ -149,14 +149,14 @@ describe('risk gates', () => {
 
   it('passes when everything is healthy', () => {
     const r = checkRiskGates({ cfg: baseCfg, market: baseMarket, book: goodBook,
-                               recentMidsCents: [40, 41, 40], exposure, proposedNotionalUsd: 30 });
+                               recentMidsCents: [40, 41, 40], exposure, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(true);
   });
 
   it('fails on liquidity', () => {
     const r = checkRiskGates({ cfg: baseCfg, market: baseMarket,
-                               book: { ...goodBook, topDepthMin: 10 },
-                               recentMidsCents: [40], exposure, proposedNotionalUsd: 30 });
+                               book: { ...goodBook, noBidSize: 10 },
+                               recentMidsCents: [40], exposure, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(false);
     expect(r.reasons.some(x => x.startsWith('gate1'))).toBe(true);
   });
@@ -164,7 +164,7 @@ describe('risk gates', () => {
   it('fails on settlement clock', () => {
     const soon = { ...baseMarket, close_time: new Date(Date.now() + 60_000).toISOString() };
     const r = checkRiskGates({ cfg: baseCfg, market: soon, book: goodBook,
-                               recentMidsCents: [40], exposure, proposedNotionalUsd: 30 });
+                               recentMidsCents: [40], exposure, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(false);
     expect(r.reasons.some(x => x.startsWith('gate5'))).toBe(true);
   });
@@ -172,7 +172,7 @@ describe('risk gates', () => {
   it('fails on concentration', () => {
     const exp = { ...exposure, byTicker: new Map([['HIGHNY-25MAY19-T75', 95]]) };
     const r = checkRiskGates({ cfg: baseCfg, market: baseMarket, book: goodBook,
-                               recentMidsCents: [40], exposure: exp, proposedNotionalUsd: 30 });
+                               recentMidsCents: [40], exposure: exp, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(false);
     expect(r.reasons.some(x => x.startsWith('gate3'))).toBe(true);
   });
@@ -180,14 +180,14 @@ describe('risk gates', () => {
   it('fails on daily loss cap', () => {
     const exp = { ...exposure, realizedPnlTodayUsd: -200 }; // -20% on $1000
     const r = checkRiskGates({ cfg: baseCfg, market: baseMarket, book: goodBook,
-                               recentMidsCents: [40], exposure: exp, proposedNotionalUsd: 30 });
+                               recentMidsCents: [40], exposure: exp, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(false);
     expect(r.reasons.some(x => x.startsWith('gate4'))).toBe(true);
   });
 
   it('fails on volatility', () => {
     const r = checkRiskGates({ cfg: baseCfg, market: baseMarket, book: goodBook,
-                               recentMidsCents: [30, 60, 35], exposure, proposedNotionalUsd: 30 });
+                               recentMidsCents: [30, 60, 35], exposure, side: 'yes', proposedNotionalUsd: 50 });
     expect(r.pass).toBe(false);
     expect(r.reasons.some(x => x.startsWith('gate2'))).toBe(true);
   });

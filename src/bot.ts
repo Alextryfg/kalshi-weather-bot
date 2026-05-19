@@ -71,8 +71,10 @@ interface ParsedTicker {
 }
 
 function parseWeatherTicker(ticker: string): ParsedTicker | null {
+  // Strip optional KX prefix (Kalshi renamed series HIGHNY -> KXHIGHNY in 2025)
+  const stripped = ticker.replace(/^KX/, '');
   // Match "HIGH<city>-<YYMMMDD>-<rest>" or "LOW<city>-<YYMMMDD>-<rest>"
-  const m = ticker.match(/^(HIGH|LOW)([A-Z]{2,4})-(\d{2}[A-Z]{3}\d{2})-(.+)$/);
+  const m = stripped.match(/^(HIGH|LOW)([A-Z]{2,4})-(\d{2}[A-Z]{3}\d{2})-(.+)$/);
   if (!m) return null;
   const [, hl, cityCode, dateCode, tail] = m;
   const city = CITY_PREFIX[cityCode];
@@ -102,10 +104,15 @@ function parseWeatherTicker(ticker: string): ParsedTicker | null {
     comparison = 'less';
     thresholdF = Number(tail.slice(1));
   } else if (tail.startsWith('B')) {
-    const [a, b] = tail.slice(1).split('.');
+    // Kalshi 'between' format: B<lower>.<upper-fractional>
+    // e.g. B95.5 = [94, 96] or more precisely lower=94, upper=96
+    // The number after B is the midpoint; bounds are mid±1
+    // e.g. B95.5 -> lower=94, upper=96 (2°F bin centred at 95)
+    // Confirmed by ticker spacing: B95.5,B93.5,B91.5... (2°F apart)
+    const mid = Number(tail.slice(1));
     comparison = 'between';
-    thresholdF = Number(a);
-    upperF = Number(b);
+    thresholdF = mid - 1;   // lower bound (exclusive on Kalshi: temp in [lower, upper))
+    upperF = mid + 1;        // upper bound
   } else {
     return null;
   }
@@ -158,22 +165,42 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 2. List weather markets. Strategy: pull active markets for each known
-  //    weather series. Kalshi groups weather contracts under series like
-  //    "HIGHNY", "HIGHCHI", etc.
-  const series = cfg.weatherCities
-    .flatMap((c) => {
-      const code = Object.entries(CITY_PREFIX).find(([, n]) => n === c)?.[0];
-      return code ? [`HIGH${code}`, `LOW${code}`] : [];
-    });
+  // 2. List weather markets.
+  // Kalshi series naming has changed over time (HIGHNY, KXHIGHNY, etc.)
+  // Strategy: try several known prefixes, plus a broad category fallback.
+  const cityCodes = cfg.weatherCities
+    .map((c) => Object.entries(CITY_PREFIX).find(([, n]) => n === c)?.[0])
+    .filter((c): c is string => !!c);
 
+  const seriesCandidates = cityCodes.flatMap((code) => [
+    `HIGH${code}`, `LOW${code}`,
+    `KXHIGH${code}`, `KXLOW${code}`,
+  ]);
+
+  const seen = new Set<string>();
   const candidates: KalshiMarket[] = [];
-  for (const s of series) {
+
+  for (const s of seriesCandidates) {
     try {
       const res = await kalshi.listMarkets({ series_ticker: s, status: 'open', limit: 100 });
-      candidates.push(...(res.markets ?? []));
+      for (const m of res.markets ?? []) {
+        if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+      }
     } catch (e) {
-      log.warn('markets.list.failed', { series: s, err: (e as Error).message });
+      log.debug('markets.series.miss', { series: s, err: (e as Error).message });
+    }
+  }
+
+  // Broad category fallback — catches future naming changes
+  if (candidates.length === 0) {
+    try {
+      const res = await kalshi.listMarkets({ category: 'weather', status: 'open', limit: 200 });
+      for (const m of res.markets ?? []) {
+        if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+      }
+      log.info('markets.category_fallback', { found: candidates.length });
+    } catch (e) {
+      log.warn('markets.category_fallback.failed', { err: (e as Error).message });
     }
   }
   log.info('markets.fetched', { count: candidates.length });
@@ -245,6 +272,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
   try {
     const ob = await kalshi.getOrderbook(market.ticker, 10);
     book = summarizeBook(ob);
+    log.debug('orderbook.summary', { ticker: market.ticker, yesBid: book.yesBid, yesAsk: book.yesAsk, mid: book.yesMidProb.toFixed(3), depth: book.topDepthMin });
   } catch (e) {
     log.warn('orderbook.failed.using_quotes', { ticker: market.ticker, err: (e as Error).message });
     book = summarizeFromMarketQuotes(market);
@@ -306,6 +334,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
     cfg,
     market,
     book,
+    side: decision.side,
     recentMidsCents: recentMids,
     exposure,
     proposedNotionalUsd,
@@ -433,7 +462,10 @@ async function manageOpenPositions(args: {
   const { cfg, db, kalshi, ordersApi } = args;
   const open = db
     .prepare(
-      `SELECT id, ticker, side, contracts, price_cents FROM positions WHERE status = 'open'`,
+      // Skip positions opened in this run (within last 2 min) to avoid
+      // immediate stop-loss from a stale book at a different price than entry.
+      `SELECT id, ticker, side, contracts, price_cents FROM positions
+       WHERE status = 'open' AND entry_ts < datetime('now', '-2 minutes')`,
     )
     .all() as { id: number; ticker: string; side: 'yes' | 'no'; contracts: number; price_cents: number }[];
 

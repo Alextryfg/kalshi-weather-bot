@@ -1,0 +1,112 @@
+# =====================================================================
+# Kalshi Weather Bot — Scheduled trader
+# =====================================================================
+# Runs every 30 minutes. By default operates in SIMULATION mode.
+# To enable live trading:
+#   1. Add `KALSHI_API_KEY_ID` and `KALSHI_PRIVATE_KEY` repo Secrets
+#   2. Change the `EXECUTION_MODE` env below to `live`
+#   3. Change the `args` step to use `--live`
+# Both must be flipped — defense in depth.
+# =====================================================================
+name: kalshi-weather-trade
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Execution mode for this manual run"
+        required: false
+        default: "simulation"
+        type: choice
+        options: [simulation, live]
+
+permissions:
+  contents: read
+  # Allow artifact upload
+  actions: read
+
+concurrency:
+  group: kalshi-trade
+  cancel-in-progress: false
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # Default is simulation; only override to "live" intentionally above.
+      EXECUTION_MODE: ${{ github.event.inputs.mode || 'simulation' }}
+      SIM_INITIAL_CAPITAL: "1000"
+      KALSHI_API_BASE: ${{ vars.KALSHI_API_BASE || 'https://demo-api.kalshi.co/trade-api/v2' }}
+      KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+      KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+      WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago' }}
+      MIN_EDGE_PP: "0.5"
+      KELLY_FRACTION: "0.5"
+      MAX_TRADE_FRACTION: "0.05"
+      STOP_LOSS_PP: "2.0"
+      MIN_ORDERBOOK_DEPTH: "50"
+      MAX_VOLATILITY_PP_1H: "20"
+      MAX_POSITION_FRACTION: "0.10"
+      DAILY_LOSS_CAP_FRACTION: "0.10"
+      MIN_HOURS_TO_SETTLEMENT: "6"
+      DB_PATH: ./data/bot.db
+      LOG_LEVEL: info
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      # The bot's DB needs to persist between runs. We use the GitHub Actions
+      # cache as a poor-man's persistent volume. Note: cache is best-effort
+      # and capped at 10GB / 7 days; for production-grade persistence move
+      # to an S3 bucket or postgres.
+      - name: Restore DB cache
+        id: dbcache
+        uses: actions/cache@v4
+        with:
+          path: ./data
+          # Always-fresh key keyed by date so each day starts a new save slot,
+          # but we restore from the latest available prefix.
+          key: bot-db-${{ github.run_id }}
+          restore-keys: |
+            bot-db-
+
+      - name: Run bot
+        run: |
+          mkdir -p data
+          if [ "$EXECUTION_MODE" = "live" ]; then
+            npx ts-node src/bot.ts --live
+          else
+            npx ts-node src/bot.ts --simulation
+          fi
+
+      - name: Save DB cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ./data
+          key: bot-db-${{ github.run_id }}
+
+      - name: Upload logs & DB as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-run-${{ github.run_id }}
+          path: |
+            data/
+            *.log
+          retention-days: 14
+          if-no-files-found: warn

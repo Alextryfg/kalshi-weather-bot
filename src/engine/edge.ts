@@ -45,34 +45,21 @@ export function computeEdge(
   const meetsThreshold = Math.abs(edgePp) >= minEdgePp;
 
   if (edge >= 0) {
-    // Long YES. Best ask is `book.yesAsk` (in cents). Post 1¢ below ask as maker.
+    // Model says YES is underpriced. Only trade if edge is positive and large enough.
+    const meetsThreshold = edgePp >= minEdgePp;
     const fair = Math.round(p * 100);
     const maker = Math.max(1, Math.min(99, book.yesAsk - 1));
-    return {
-      modelProb: p,
-      marketProb,
-      edge,
-      edgePp,
-      side: 'yes',
-      fairPriceCents: fair,
-      makerLimitCents: maker,
-      meetsThreshold,
-    };
+    return { modelProb: p, marketProb, edge, edgePp, side: 'yes',
+             fairPriceCents: fair, makerLimitCents: maker, meetsThreshold };
   } else {
-    // Long NO. Best NO ask = 100 - best YES bid. NO price = 1 - p (in cents).
+    // Model says NO is underpriced (YES is overpriced). Only trade if NO edge is large enough.
+    const noEdgePp = -edgePp;
+    const meetsThreshold = noEdgePp >= minEdgePp;
     const noFair = Math.round((1 - p) * 100);
     const noBestAsk = Math.max(1, Math.min(99, 100 - book.yesBid));
     const maker = Math.max(1, Math.min(99, noBestAsk - 1));
-    return {
-      modelProb: p,
-      marketProb,
-      edge,
-      edgePp,
-      side: 'no',
-      fairPriceCents: noFair,
-      makerLimitCents: maker,
-      meetsThreshold,
-    };
+    return { modelProb: p, marketProb, edge, edgePp, side: 'no',
+             fairPriceCents: noFair, makerLimitCents: maker, meetsThreshold };
   }
 }
 
