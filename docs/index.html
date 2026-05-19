@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalshi Weather Bot</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+  :root{--bg:#0a0a0f;--surface:#111118;--border:#1e1e2e;--accent:#00ff88;--accent2:#0088ff;--warn:#ff6b35;--text:#e0e0f0;--muted:#555570;--green:#00cc66;--red:#ff4455}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:14px;min-height:100vh}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,255,136,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  .container{max-width:1200px;margin:0 auto;padding:32px 24px;position:relative;z-index:1}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+  .logo{display:flex;align-items:center;gap:12px}
+  h1{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;color:var(--accent);letter-spacing:.05em}
+  .tagline{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.1em;text-transform:uppercase}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 12px;border-radius:2px;background:rgba(0,255,136,.1);color:var(--accent);border:1px solid rgba(0,255,136,.3)}
+  .badge.live{background:rgba(255,107,53,.1);color:var(--warn);border-color:rgba(255,107,53,.3)}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+  @media(max-width:700px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--surface);border:1px solid var(--border);padding:20px;position:relative;overflow:hidden}
+  .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);opacity:.5}
+  .kpi.neg::before{background:var(--red)}.kpi.pos::before{background:var(--green)}
+  .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin-bottom:10px}
+  .kpi-value{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;line-height:1}
+  .kpi-sub{font-size:11px;color:var(--muted);margin-top:6px}
+  .green{color:var(--green)}.red{color:var(--red)}.accent{color:var(--accent)}.muted{color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--border);margin-bottom:16px}
+  .panel-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .panel-title{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:var(--accent)}
+  .panel-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)}
+  .panel-body{overflow-x:auto}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;padding:10px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:400;white-space:nowrap}
+  td{padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:12px;border-bottom:1px solid rgba(30,30,46,.6);white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .chip{display:inline-block;padding:2px 8px;font-size:10px;border-radius:2px;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em}
+  .chip.trade{background:rgba(0,255,136,.15);color:var(--accent)}
+  .chip.no_edge,.chip.sim{background:rgba(85,85,112,.3);color:var(--muted)}
+  .chip.reject{background:rgba(255,68,85,.15);color:var(--red)}
+  .chip.yes{background:rgba(0,136,255,.15);color:var(--accent2)}
+  .chip.no{background:rgba(255,107,53,.15);color:var(--warn)}
+  .empty{padding:24px;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:center}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:11px}
+  footer span{font-family:'IBM Plex Mono',monospace}
+  .loading,.error{text-align:center;padding:80px 20px;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px}
+  .error{color:var(--red)}
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--border)}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div style="width:36px;height:36px;background:var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);display:flex;align-items:center;justify-content:center;font-size:16px">⬡</div>
+      <div>
+        <h1>KALSHI WEATHER BOT</h1>
+        <div class="tagline">Prediction Market Algorithmic Trader</div>
+      </div>
+    </div>
+    <div id="badge" class="badge">● SIM</div>
+  </header>
+  <div id="root"><div class="loading">Loading data…</div></div>
+  <footer><span id="updated">—</span><span>kalshi-weather-bot</span></footer>
+</div>
+<script>
+async function load(){
+  try{
+    const r=await fetch('./summary.json?t='+Date.now());
+    if(!r.ok)throw new Error('summary.json not found — run the bot at least once');
+    render(await r.json());
+  }catch(e){
+    document.getElementById('root').innerHTML=`<div class="error">⚠ ${e.message}<br><br><span style="color:var(--muted);font-size:11px">Run the bot locally or wait for the next GitHub Actions cron (every 30 min).</span></div>`;
+  }
+}
+function sign(v){return v>=0?'+':'-'}
+function fmt(v,d=2){if(v==null)return'—';return sign(v)+'$'+Math.abs(v).toFixed(d)}
+function pct(v){if(v==null)return'—';return(v>=0?'+':'')+v.toFixed(1)+'%'}
+function cc(v){if(v==null||v===0)return'muted';return v>0?'green':'red'}
+function render(d){
+  const badge=document.getElementById('badge');
+  if(d.mode==='live'){badge.textContent='● LIVE';badge.classList.add('live');}
+  document.getElementById('updated').textContent='Updated '+new Date(d.generated_at).toLocaleString();
+  const IC=1000;
+  const totalPct=(d.realized_pnl_total_usd/IC)*100;
+  const todayPct=(d.realized_pnl_today_usd/Math.max(d.bankroll_usd,1))*100;
+  const decs=d.recent_decisions||[];
+  const trades=decs.filter(x=>x.decision==='trade');
+  const winrate=trades.length?((trades.filter(x=>(x.realized_pnl_usd??0)>0).length/trades.length)*100).toFixed(0)+'%':'—';
+  let h='';
+  // KPIs
+  h+=`<div class="kpi-grid">
+    <div class="kpi ${d.bankroll_usd>=IC?'pos':'neg'}">
+      <div class="kpi-label">Bankroll</div>
+      <div class="kpi-value ${d.bankroll_usd>=IC?'green':'red'}">$${d.bankroll_usd.toFixed(0)}</div>
+      <div class="kpi-sub">Started $${IC}</div>
+    </div>
+    <div class="kpi ${d.realized_pnl_total_usd>=0?'pos':'neg'}">
+      <div class="kpi-label">Total P&L</div>
+      <div class="kpi-value ${cc(d.realized_pnl_total_usd)}">${fmt(d.realized_pnl_total_usd)}</div>
+      <div class="kpi-sub">${pct(totalPct)} of capital</div>
+    </div>
+    <div class="kpi ${d.realized_pnl_today_usd>=0?'pos':'neg'}">
+      <div class="kpi-label">Today P&L</div>
+      <div class="kpi-value ${cc(d.realized_pnl_today_usd)}">${fmt(d.realized_pnl_today_usd)}</div>
+      <div class="kpi-sub">${pct(todayPct)} of bankroll</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value accent">${winrate}</div>
+      <div class="kpi-sub">${trades.length} trades total</div>
+    </div>
+  </div>`;
+  // Open positions + sparkline
+  const positions=d.open_positions||[];
+  const pnlHist=(d.pnl_history||[]).slice(0,14).reverse();
+  h+=`<div class="grid2">`;
+  h+=`<div class="panel"><div class="panel-header"><span class="panel-title">Open Positions</span><span class="panel-count">${positions.length} open</span></div><div class="panel-body">`;
+  if(!positions.length){h+=`<div class="empty">No open positions</div>`;}
+  else{h+=`<table><thead><tr><th>Ticker</th><th>Side</th><th>Qty</th><th>Entry</th></tr></thead><tbody>`;
+    for(const p of positions)h+=`<tr><td>${p.ticker}</td><td><span class="chip ${p.side}">${p.side.toUpperCase()}</span></td><td>${p.contracts}</td><td>${p.price_cents}¢</td></tr>`;
+    h+=`</tbody></table>`;}
+  h+=`</div></div>`;
+  // PnL sparkline
+  h+=`<div class="panel"><div class="panel-header"><span class="panel-title">Daily P&L — last 14 days</span></div><div class="panel-body" style="padding:20px">`;
+  if(!pnlHist.length){h+=`<div class="empty">No history yet</div>`;}
+  else{
+    const vals=pnlHist.map(x=>x.realized_pnl_usd??0);
+    const maxV=Math.max(...vals.map(Math.abs),1);
+    const w=100/vals.length;
+    h+=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100px;display:block">
+      <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(85,85,112,.4)" stroke-width=".5"/>`;
+    vals.forEach((v,i)=>{
+      const x=i*w+w*.1,bw=w*.8,ht=Math.abs(v)/maxV*44,y=v>=0?50-ht:50;
+      h+=`<rect x="${x}" y="${y}" width="${bw}" height="${ht}" fill="${v>=0?'#00cc66':'#ff4455'}" opacity=".8"/>`;
+    });
+    h+=`</svg>`;}
+  h+=`</div></div></div>`;
+  // Decisions table
+  h+=`<div class="panel"><div class="panel-header"><span class="panel-title">Recent Decisions</span><span class="panel-count">${decs.length} logged</span></div><div class="panel-body">
+    <table><thead><tr><th>Time</th><th>Ticker</th><th>City</th><th>Side</th><th>Model</th><th>Market</th><th>Edge pp</th><th>Decision</th></tr></thead><tbody>`;
+  for(const dec of decs.slice(0,30)){
+    const t=new Date(dec.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const ep=dec.edge_pp!=null?dec.edge_pp.toFixed(1):'—';
+    const ec=dec.edge_pp>0?'green':dec.edge_pp<0?'red':'muted';
+    h+=`<tr>
+      <td class="muted">${t}</td><td>${dec.ticker??'—'}</td><td class="muted">${dec.city??'—'}</td>
+      <td>${dec.side?`<span class="chip ${dec.side}">${dec.side.toUpperCase()}</span>`:'—'}</td>
+      <td>${dec.model_prob!=null?(dec.model_prob*100).toFixed(1)+'%':'—'}</td>
+      <td>${dec.market_prob!=null?(dec.market_prob*100).toFixed(1)+'%':'—'}</td>
+      <td class="${ec}">${ep}</td>
+      <td><span class="chip ${dec.decision??''}">${dec.decision??'—'}</span></td>
+    </tr>`;
+  }
+  h+=`</tbody></table></div></div>`;
+  // Orders
+  const ords=d.recent_orders||[];
+  if(ords.length){
+    h+=`<div class="panel"><div class="panel-header"><span class="panel-title">Recent Orders</span><span class="panel-count">${ords.length}</span></div><div class="panel-body">
+      <table><thead><tr><th>Time</th><th>Ticker</th><th>Side</th><th>Qty</th><th>Price</th><th>Status</th></tr></thead><tbody>`;
+    for(const o of ords){
+      const t=new Date(o.ts).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      h+=`<tr><td class="muted">${t}</td><td>${o.ticker}</td><td><span class="chip ${o.side}">${o.side.toUpperCase()}</span></td><td>${o.count}</td><td>${o.price_cents}¢</td><td><span class="chip ${o.status}">${o.status}</span></td></tr>`;
+    }
+    h+=`</tbody></table></div></div>`;}
+  document.getElementById('root').innerHTML=h;
+}
+load();
+setInterval(load,5*60*1000);
+</script>
+</body>
+</html>

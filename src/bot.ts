@@ -235,6 +235,44 @@ async function main(): Promise<void> {
   // 5. Manage existing positions (stop-loss).
   await manageOpenPositions({ cfg, db, kalshi, ordersApi });
 
+  // Export summary.json for GitHub Pages dashboard
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const state = db.prepare('SELECT * FROM bot_state WHERE id=1').get() as any;
+    const recentDecisions = db.prepare(
+      `SELECT ts, ticker, city, model_prob, market_prob, edge_pp, side, decision, gate_failures
+       FROM decisions ORDER BY ts DESC LIMIT 50`
+    ).all();
+    const recentOrders = db.prepare(
+      `SELECT ts, ticker, side, action, price_cents, count, status, avg_fill_cents
+       FROM orders ORDER BY ts DESC LIMIT 20`
+    ).all();
+    const pnlHistory = db.prepare(
+      `SELECT * FROM pnl_history ORDER BY date DESC LIMIT 30`
+    ).all();
+    const openPositions = db.prepare(
+      `SELECT ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status='open'`
+    ).all();
+    const summary = {
+      generated_at: new Date().toISOString(),
+      mode: cfg.mode,
+      bankroll_usd: state?.bankroll_usd ?? cfg.simInitialCapital,
+      realized_pnl_today_usd: state?.realized_pnl_today_usd ?? 0,
+      realized_pnl_total_usd: state?.realized_pnl_total_usd ?? 0,
+      open_positions: openPositions,
+      recent_decisions: recentDecisions,
+      recent_orders: recentOrders,
+      pnl_history: pnlHistory,
+    };
+    const outDir = path.join(process.cwd(), 'docs');
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
+    log.info('summary.exported', { path: 'docs/summary.json' });
+  } catch (e) {
+    log.warn('summary.export.failed', { err: (e as Error).message });
+  }
+  
   log.info('bot.done');
   db.close();
 }

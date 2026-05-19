@@ -42,8 +42,6 @@ export function computeEdge(
   const marketProb = clamp(book.yesMidProb, 0.001, 0.999);
   const edge = p - marketProb;
   const edgePp = edge * 100;
-  const meetsThreshold = Math.abs(edgePp) >= minEdgePp;
-
   if (edge >= 0) {
     // Model says YES is underpriced. Only trade if edge is positive and large enough.
     const meetsThreshold = edgePp >= minEdgePp;
