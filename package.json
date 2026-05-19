@@ -1,0 +1,33 @@
+{
+  "name": "kalshi-weather-bot",
+  "version": "0.1.0",
+  "description": "Automated Kalshi prediction-market trader for weather contracts using GraphCast/ECMWF forecasts",
+  "main": "dist/bot.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/bot.js",
+    "dev": "ts-node src/bot.ts",
+    "simulate": "ts-node src/bot.ts --simulation",
+    "live": "ts-node src/bot.ts --live",
+    "test": "jest",
+    "test:dry": "ts-node src/bot.ts --simulation --dry-run",
+    "migrate": "ts-node src/db/index.ts --migrate"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "axios-retry": "^4.4.1",
+    "better-sqlite3": "^11.1.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "license": "MIT"
+}

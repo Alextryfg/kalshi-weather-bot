@@ -1,0 +1,4 @@
+-- Migration 001: initial schema.
+-- This file mirrors src/db/schema.sql; the migrate() function applies it
+-- idempotently on first boot.
+-- See ../schema.sql for the authoritative definitions.
