@@ -34,10 +34,10 @@ jobs:
       KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
       KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
       WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago' }}
-      MIN_EDGE_PP: "0.5"
-      KELLY_FRACTION: "0.5"
-      MAX_TRADE_FRACTION: "0.05"
-      STOP_LOSS_PP: "2.0"
+      MIN_EDGE_PP: "5.0"         # antes 0.5
+      KELLY_FRACTION: "0.25"     # quarter Kelly no half antes 0.5
+      MAX_TRADE_FRACTION: "0.02" # 2% no 5%antes 0.05
+      STOP_LOSS_PP: "8.0"        # mids no apretarantes 2.0
       MIN_ORDERBOOK_DEPTH: "50"
       MAX_VOLATILITY_PP_1H: "20"
       MAX_POSITION_FRACTION: "0.10"

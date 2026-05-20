@@ -1,34 +1,29 @@
 /**
  * Edge calculation: model probability vs. implied market probability.
  *
- * Definitions:
- *   modelProb  = our forecast of P(YES) ∈ [0,1]
- *   marketProb = mid-implied probability from the order book ∈ [0,1]
- *   edge       = modelProb - marketProb  (signed, ±pp/100)
- *
- * Side selection:
- *   edge > 0    → BUY YES at the ASK (or post a limit 1 cent inside)
- *   edge < 0    → BUY NO  at NO ASK (equivalently SELL YES)
- *
- * The minimum edge threshold is enforced in pp (1pp = 0.01 in probability).
+ * After computing raw edge (modelProb - marketProb), we subtract estimated
+ * trading friction (Kalshi fees + bid-ask spread) before comparing to the
+ * minimum threshold. This prevents taking trades that look profitable on
+ * paper but lose money after costs.
  */
 
 import type { BookSummary } from './pricing';
 
+// Estimated round-trip costs in percentage points
+const KALSHI_FEE_PP = 2.0;    // ~7% fee on profit, amortised
+const SPREAD_COST_PP = 3.0;   // typical bid-ask crossing cost in+out
+const FRICTION_PP = KALSHI_FEE_PP + SPREAD_COST_PP;
+
 export interface EdgeDecision {
   modelProb: number;
   marketProb: number;
-  /** Signed edge in probability units (positive = model > market). */
   edge: number;
-  /** Edge in percentage points (signed). */
   edgePp: number;
-  /** "yes" or "no" — which side we should be long. */
+  /** Net edge after subtracting estimated friction. */
+  netEdgePp: number;
   side: 'yes' | 'no';
-  /** "fair" market price for the chosen side, in cents. */
   fairPriceCents: number;
-  /** Limit-order price (cents) using maker strategy: 1¢ inside best opposing offer. */
   makerLimitCents: number;
-  /** True if the absolute edge meets the bot's minimum threshold. */
   meetsThreshold: boolean;
 }
 
@@ -37,26 +32,26 @@ export function computeEdge(
   book: BookSummary,
   minEdgePp: number,
 ): EdgeDecision {
-  // Clamp to safe range.
   const p = clamp(modelProb, 0.001, 0.999);
   const marketProb = clamp(book.yesMidProb, 0.001, 0.999);
   const edge = p - marketProb;
   const edgePp = edge * 100;
+
   if (edge >= 0) {
-    // Model says YES is underpriced. Only trade if edge is positive and large enough.
-    const meetsThreshold = edgePp >= minEdgePp;
+    const netEdgePp = edgePp - FRICTION_PP;
+    const meetsThreshold = netEdgePp >= minEdgePp;
     const fair = Math.round(p * 100);
     const maker = Math.max(1, Math.min(99, book.yesAsk - 1));
-    return { modelProb: p, marketProb, edge, edgePp, side: 'yes',
+    return { modelProb: p, marketProb, edge, edgePp, netEdgePp, side: 'yes',
              fairPriceCents: fair, makerLimitCents: maker, meetsThreshold };
   } else {
-    // Model says NO is underpriced (YES is overpriced). Only trade if NO edge is large enough.
     const noEdgePp = -edgePp;
-    const meetsThreshold = noEdgePp >= minEdgePp;
+    const netEdgePp = noEdgePp - FRICTION_PP;
+    const meetsThreshold = netEdgePp >= minEdgePp;
     const noFair = Math.round((1 - p) * 100);
     const noBestAsk = Math.max(1, Math.min(99, 100 - book.yesBid));
     const maker = Math.max(1, Math.min(99, noBestAsk - 1));
-    return { modelProb: p, marketProb, edge, edgePp, side: 'no',
+    return { modelProb: p, marketProb, edge, edgePp, netEdgePp, side: 'no',
              fairPriceCents: noFair, makerLimitCents: maker, meetsThreshold };
   }
 }
