@@ -201,6 +201,7 @@ export interface KalshiMarket {
   cap_strike?: number;
   floor_strike?: number;
   strike_type?: 'greater' | 'less' | 'between' | 'structured' | string;
+  result?: string;
 }
 
 export interface KalshiMarketsResponse {

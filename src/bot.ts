@@ -20,6 +20,8 @@
  * specialized modules; this file is mostly glue + control flow.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { loadConfig, BotConfig } from './config';
 import { log, setLogLevel } from './logger';
 import { openDb, migrate, recordDecision, recordOrder, recordOpenPosition,
@@ -232,12 +234,17 @@ async function main(): Promise<void> {
     }
   }
 
-  // 5. Manage existing positions (stop-loss).
+  // 5. Manage existing positions (stop-loss and settlement).
   await manageOpenPositions({ cfg, db, kalshi, ordersApi });
+  await settleOpenPositions({ cfg, db, kalshi });
+
+  // 6. Generate summary
+  dumpSummary({ db, exposure, cfg });
 
   log.info('bot.done');
   db.close();
 }
+
 
 interface ProcessCtx {
   cfg: BotConfig;
@@ -507,6 +514,102 @@ async function manageOpenPositions(args: {
     } catch (e) {
       log.warn('manage.position.failed', { ticker: p.ticker, err: (e as Error).message });
     }
+  }
+}
+
+async function settleOpenPositions(args: {
+  cfg: BotConfig;
+  db: ReturnType<typeof openDb>;
+  kalshi: KalshiClient;
+}): Promise<void> {
+  const { cfg, db, kalshi } = args;
+  // Get all open positions
+  const open = db
+    .prepare(`SELECT id, ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status = 'open'`)
+    .all() as { id: number; ticker: string; side: 'yes' | 'no'; contracts: number; price_cents: number; entry_ts: string }[];
+
+  for (const p of open) {
+    try {
+      const res = await kalshi.getMarket(p.ticker);
+      const m = res.market;
+      if (m.status === 'settled' || m.status === 'determined') {
+        let win = false;
+        if (m.result) {
+          win = (m.result === p.side);
+        } else if (m.last_price !== undefined) {
+          win = (p.side === 'yes' && m.last_price === 100) || (p.side === 'no' && m.last_price === 0);
+        } else {
+          continue; // Cannot determine result yet
+        }
+        
+        const closePriceCents = win ? 100 : 0;
+        const realized = (closePriceCents - p.price_cents) * p.contracts / 100;
+        
+        if (cfg.mode === 'simulation' || cfg.dryRun) {
+          db.prepare(
+            `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
+          ).run(new Date().toISOString(), closePriceCents, realized, p.id);
+          adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
+          log.info('position.settled.sim', { ticker: p.ticker, win, realized });
+        } else {
+          // Live mode handles payout in Kalshi balance, but we still need to update our DB status
+          db.prepare(
+            `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
+          ).run(new Date().toISOString(), closePriceCents, realized, p.id);
+          // In live mode adjustBankroll isn't strictly needed for bankroll (as it's read from API) but we want to track realized PnL
+          adjustBankroll(db, 0, realized);
+          log.info('position.settled.live', { ticker: p.ticker, win, realized });
+        }
+        
+        // Update pnl_history
+        const today = new Date().toISOString().slice(0, 10);
+        db.prepare(`
+          INSERT INTO pnl_history (date, realized_pnl_usd, trades_closed)
+          VALUES (?, ?, 1)
+          ON CONFLICT(date) DO UPDATE SET 
+            realized_pnl_usd = realized_pnl_usd + ?,
+            trades_closed = trades_closed + 1
+        `).run(today, realized, realized);
+      }
+    } catch (e) {
+      log.warn('settle.position.failed', { ticker: p.ticker, err: (e as Error).message });
+    }
+  }
+}
+
+function dumpSummary(args: {
+  db: ReturnType<typeof openDb>;
+  exposure: any;
+  cfg: BotConfig;
+}): void {
+  const { db, exposure, cfg } = args;
+  try {
+    const state = db.prepare('SELECT * FROM bot_state WHERE id = 1').get() as any;
+    const openPos = db.prepare('SELECT ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status = "open" ORDER BY entry_ts DESC').all();
+    const recentDecs = db.prepare('SELECT ts, ticker, city, model_prob as model_prob, market_prob as market_prob, edge_pp, side, decision, gate_failures FROM decisions ORDER BY ts DESC LIMIT 50').all();
+    const recentOrds = db.prepare('SELECT ts, ticker, side, action, price_cents, count, status, avg_fill_cents FROM orders ORDER BY ts DESC LIMIT 50').all();
+    const pnlHist = db.prepare('SELECT date, realized_pnl_usd FROM pnl_history ORDER BY date DESC LIMIT 14').all();
+
+    const summary = {
+      generated_at: new Date().toISOString(),
+      mode: state?.mode || cfg.mode,
+      bankroll_usd: exposure.bankrollUsd,
+      realized_pnl_today_usd: state?.realized_pnl_today_usd || 0,
+      realized_pnl_total_usd: state?.realized_pnl_total_usd || 0,
+      open_positions: openPos,
+      recent_decisions: recentDecs,
+      recent_orders: recentOrds,
+      pnl_history: pnlHist,
+    };
+
+    const outPath = path.join(__dirname, '..', 'docs', 'summary.json');
+    if (!fs.existsSync(path.dirname(outPath))) {
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    }
+    fs.writeFileSync(outPath, JSON.stringify(summary, null, 2));
+    log.info('summary.dumped', { path: outPath });
+  } catch (e) {
+    log.error('summary.dump.failed', { err: (e as Error).message });
   }
 }
 
