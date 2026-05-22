@@ -18,6 +18,7 @@ export interface BotConfig {
   // Execution
   mode: ExecutionMode;
   dryRun: boolean;
+  resetSim: boolean;
   simInitialCapital: number;
 
   // Kalshi
@@ -79,6 +80,7 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
   const wantsLive = argv.includes('--live');
   const wantsSim = argv.includes('--simulation');
   const dryRun = argv.includes('--dry-run');
+  const resetSim = argv.includes('--reset-sim');
 
   const envMode = (process.env.EXECUTION_MODE ?? 'simulation').toLowerCase();
   if (envMode !== 'simulation' && envMode !== 'live') {
@@ -112,6 +114,7 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
   return {
     mode,
     dryRun,
+    resetSim,
     simInitialCapital: readEnvNum('SIM_INITIAL_CAPITAL', 1000),
 
     kalshiApiBase: readEnv('KALSHI_API_BASE', 'https://demo-api.kalshi.co/trade-api/v2'),

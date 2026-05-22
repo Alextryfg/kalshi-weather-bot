@@ -153,19 +153,50 @@ async function main(): Promise<void> {
   });
 
   const db = openDb(cfg);
+
+  if (cfg.resetSim && cfg.mode === 'simulation') {
+    db.prepare('DROP TABLE IF EXISTS bot_state').run();
+    db.prepare('DROP TABLE IF EXISTS positions').run();
+    db.prepare('DROP TABLE IF EXISTS orders').run();
+    db.prepare('DROP TABLE IF EXISTS decisions').run();
+    db.prepare('DROP TABLE IF EXISTS pnl_history').run();
+    log.info('bot.sim_reset');
+  }
+
   migrate(db, cfg.mode, cfg.simInitialCapital);
 
   const kalshi = new KalshiClient(cfg);
   const ordersApi = new OrdersApi(kalshi);
   const positionsApi = new PositionsApi(kalshi);
 
-  // 1. Fetch forecasts
-  const forecasts = await fetchForecasts(cfg.weatherCities);
-  if (forecasts.size === 0) {
-    log.error('bot.no_forecasts');
-    db.close();
-    return;
+  let exposure: ExposureSnapshot;
+  if (cfg.mode === 'live') {
+    try {
+      exposure = await getExposureLive(positionsApi);
+    } catch (e) {
+      log.error('exposure.live.failed.using_sim_fallback', { err: (e as Error).message });
+      exposure = getExposureSim(db, cfg.simInitialCapital);
+    }
+  } else {
+    exposure = getExposureSim(db, cfg.simInitialCapital);
   }
+  log.info('exposure', {
+    bankroll: exposure.bankrollUsd,
+    atRisk: exposure.totalAtRiskUsd,
+    realizedToday: exposure.realizedPnlTodayUsd,
+  });
+
+  try {
+    // Manage existing positions (stop-loss and settlement) FIRST so exposure is accurate, but we already got exposure. That's fine.
+    await manageOpenPositions({ cfg, db, kalshi, ordersApi });
+    await settleOpenPositions({ cfg, db, kalshi });
+
+    // 1. Fetch forecasts
+    const forecasts = await fetchForecasts(cfg.weatherCities);
+    if (forecasts.size === 0) {
+      log.error('bot.no_forecasts');
+      return;
+    }
 
   // 2. List weather markets.
   // Kalshi series naming has changed over time (HIGHNY, KXHIGHNY, etc.)
@@ -207,24 +238,6 @@ async function main(): Promise<void> {
   }
   log.info('markets.fetched', { count: candidates.length });
 
-  // 3. Compute current exposure (bankroll, by-ticker concentration, daily PnL)
-  let exposure: ExposureSnapshot;
-  if (cfg.mode === 'live') {
-    try {
-      exposure = await getExposureLive(positionsApi);
-    } catch (e) {
-      log.error('exposure.live.failed.using_sim_fallback', { err: (e as Error).message });
-      exposure = getExposureSim(db, cfg.simInitialCapital);
-    }
-  } else {
-    exposure = getExposureSim(db, cfg.simInitialCapital);
-  }
-  log.info('exposure', {
-    bankroll: exposure.bankrollUsd,
-    atRisk: exposure.totalAtRiskUsd,
-    realizedToday: exposure.realizedPnlTodayUsd,
-  });
-
   // 4. Iterate markets
   for (const m of candidates) {
     try {
@@ -234,15 +247,12 @@ async function main(): Promise<void> {
     }
   }
 
-  // 5. Manage existing positions (stop-loss and settlement).
-  await manageOpenPositions({ cfg, db, kalshi, ordersApi });
-  await settleOpenPositions({ cfg, db, kalshi });
-
-  // 6. Generate summary
-  dumpSummary({ db, exposure, cfg });
-
-  log.info('bot.done');
-  db.close();
+  } finally {
+    // 6. Generate summary
+    dumpSummary({ db, exposure, cfg });
+    log.info('bot.done');
+    db.close();
+  }
 }
 
 
