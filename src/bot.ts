@@ -24,8 +24,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfig, BotConfig } from './config';
 import { log, setLogLevel } from './logger';
-import { openDb, migrate, recordDecision, recordOrder, recordOpenPosition,
-         recordPriceObservation, getRecentMids, adjustBankroll } from './db';
+import {
+  openDb, migrate, recordDecision, recordOrder, recordOpenPosition,
+  recordPriceObservation, getRecentMids, adjustBankroll
+} from './db';
 import { KalshiClient, KalshiMarket } from './kalshi/client';
 import { OrdersApi } from './kalshi/orders';
 import { PositionsApi } from './kalshi/positions';
@@ -59,7 +61,7 @@ import * as crypto from 'crypto';
 // If Kalshi's actual schema differs, override `parseWeatherTicker` here.
 
 const CITY_PREFIX: Record<string, string> = {
-  NY: 'New York',  CHI: 'Chicago',  LAX: 'Los Angeles',  LON: 'London',
+  NY: 'New York', CHI: 'Chicago', LAX: 'Los Angeles', LON: 'London',
 };
 
 interface ParsedTicker {
@@ -198,54 +200,54 @@ async function main(): Promise<void> {
       return;
     }
 
-  // 2. List weather markets.
-  // Kalshi series naming has changed over time (HIGHNY, KXHIGHNY, etc.)
-  // Strategy: try several known prefixes, plus a broad category fallback.
-  const cityCodes = cfg.weatherCities
-    .map((c) => Object.entries(CITY_PREFIX).find(([, n]) => n === c)?.[0])
-    .filter((c): c is string => !!c);
+    // 2. List weather markets.
+    // Kalshi series naming has changed over time (HIGHNY, KXHIGHNY, etc.)
+    // Strategy: try several known prefixes, plus a broad category fallback.
+    const cityCodes = cfg.weatherCities
+      .map((c) => Object.entries(CITY_PREFIX).find(([, n]) => n === c)?.[0])
+      .filter((c): c is string => !!c);
 
-  const seriesCandidates = cityCodes.flatMap((code) => [
-    `HIGH${code}`, `LOW${code}`,
-    `KXHIGH${code}`, `KXLOW${code}`,
-  ]);
+    const seriesCandidates = cityCodes.flatMap((code) => [
+      `HIGH${code}`, `LOW${code}`,
+      `KXHIGH${code}`, `KXLOW${code}`,
+    ]);
 
-  const seen = new Set<string>();
-  const candidates: KalshiMarket[] = [];
+    const seen = new Set<string>();
+    const candidates: KalshiMarket[] = [];
 
-  for (const s of seriesCandidates) {
-    try {
-      const res = await kalshi.listMarkets({ series_ticker: s, status: 'open', limit: 100 });
-      for (const m of res.markets ?? []) {
-        if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+    for (const s of seriesCandidates) {
+      try {
+        const res = await kalshi.listMarkets({ series_ticker: s, status: 'open', limit: 100 });
+        for (const m of res.markets ?? []) {
+          if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+        }
+      } catch (e) {
+        log.debug('markets.series.miss', { series: s, err: (e as Error).message });
       }
-    } catch (e) {
-      log.debug('markets.series.miss', { series: s, err: (e as Error).message });
     }
-  }
 
-  // Broad category fallback — catches future naming changes
-  if (candidates.length === 0) {
-    try {
-      const res = await kalshi.listMarkets({ category: 'weather', status: 'open', limit: 200 });
-      for (const m of res.markets ?? []) {
-        if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+    // Broad category fallback — catches future naming changes
+    if (candidates.length === 0) {
+      try {
+        const res = await kalshi.listMarkets({ category: 'weather', status: 'open', limit: 200 });
+        for (const m of res.markets ?? []) {
+          if (!seen.has(m.ticker)) { seen.add(m.ticker); candidates.push(m); }
+        }
+        log.info('markets.category_fallback', { found: candidates.length });
+      } catch (e) {
+        log.warn('markets.category_fallback.failed', { err: (e as Error).message });
       }
-      log.info('markets.category_fallback', { found: candidates.length });
-    } catch (e) {
-      log.warn('markets.category_fallback.failed', { err: (e as Error).message });
     }
-  }
-  log.info('markets.fetched', { count: candidates.length });
+    log.info('markets.fetched', { count: candidates.length });
 
-  // 4. Iterate markets
-  for (const m of candidates) {
-    try {
-      await processMarket({ cfg, db, kalshi, ordersApi, market: m, forecasts, exposure });
-    } catch (e) {
-      log.error('market.process.failed', { ticker: m.ticker, err: (e as Error).message });
+    // 4. Iterate markets
+    for (const m of candidates) {
+      try {
+        await processMarket({ cfg, db, kalshi, ordersApi, market: m, forecasts, exposure });
+      } catch (e) {
+        log.error('market.process.failed', { ticker: m.ticker, err: (e as Error).message });
+      }
     }
-  }
 
   } finally {
     // 6. Generate summary
@@ -323,7 +325,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
       city: parsed.city,
       modelProb,
       marketProb: book.yesMidProb,
-      edgePp: decision.edgePp,
+      edgePp: decision.netEdgePp,  // log NET edge (after friction) for clarity
       side: decision.side,
       decision: 'no_edge',
       reasoning: { parsed, book },
@@ -364,7 +366,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
       city: parsed.city,
       modelProb,
       marketProb: book.yesMidProb,
-      edgePp: decision.edgePp,
+      edgePp: decision.netEdgePp,  // log NET edge (after friction) for clarity
       side: decision.side,
       decision: 'reject',
       gateFailures: provisionalSize.contracts < 1 ? [...gates.reasons, 'size_zero'] : gates.reasons,
@@ -403,7 +405,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
     city: parsed.city,
     modelProb,
     marketProb: book.yesMidProb,
-    edgePp: decision.edgePp,
+    edgePp: decision.netEdgePp,  // log NET edge (after friction) for clarity
     side: decision.side,
     decision: 'trade',
     reasoning: { parsed, kelly: provisionalSize, makerCents: pricePer, book },
@@ -533,12 +535,77 @@ async function settleOpenPositions(args: {
   kalshi: KalshiClient;
 }): Promise<void> {
   const { cfg, db, kalshi } = args;
-  // Get all open positions
   const open = db
     .prepare(`SELECT id, ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status = 'open'`)
     .all() as { id: number; ticker: string; side: 'yes' | 'no'; contracts: number; price_cents: number; entry_ts: string }[];
 
+  const nowUtc = Date.now();
+
   for (const p of open) {
+    // ── Simulation: settle by date from ticker name ──────────────────────────
+    // In simulation mode we don't rely on the Kalshi API to tell us outcome.
+    // Instead we parse the settlement date from the ticker (e.g. 26MAY20 = 2026-05-20),
+    // and once that date has passed in UTC we query the API for the result.
+    // If the API is unreachable (demo endpoint / expired market), we use the
+    // last known mid-price as a proxy: mid >= 50 → YES wins.
+    if (cfg.mode === 'simulation' || cfg.dryRun) {
+      const parsed = parseWeatherTicker(p.ticker);
+      if (!parsed) continue;
+
+      // Market settles at end of the local weather day — treat as 23:59 UTC on that date
+      const settleDateMs = new Date(parsed.date + 'T23:59:00Z').getTime();
+      if (nowUtc < settleDateMs) continue; // not yet expired
+
+      // Try API first; fall back to last mid in price_history
+      let win: boolean | null = null;
+      try {
+        const res = await kalshi.getMarket(p.ticker);
+        const m = res.market;
+        if (m.status === 'settled' || m.status === 'determined') {
+          if (m.result) {
+            win = (m.result === p.side);
+          } else if (m.last_price !== undefined) {
+            win = (p.side === 'yes' && m.last_price === 100) || (p.side === 'no' && m.last_price === 0);
+          }
+        }
+      } catch (_e) {
+        // API unavailable — use last known mid as proxy
+        const lastMid = db
+          .prepare(`SELECT mid_cents FROM price_history WHERE ticker = ? ORDER BY ts DESC LIMIT 1`)
+          .get(p.ticker) as { mid_cents: number } | undefined;
+        if (lastMid) {
+          win = (p.side === 'yes') ? lastMid.mid_cents >= 50 : lastMid.mid_cents < 50;
+          log.warn('settle.api_fallback.mid_proxy', { ticker: p.ticker, mid: lastMid.mid_cents, win });
+        }
+      }
+
+      if (win === null) {
+        // Force-expire with a 0-outcome so stale positions don't block bankroll forever
+        // Mark as expired (not win, not loss) — treat as loss of premium paid
+        win = false;
+        log.warn('settle.force_expire', { ticker: p.ticker });
+      }
+
+      const closePriceCents = win ? 100 : 0;
+      const realized = (closePriceCents - p.price_cents) * p.contracts / 100;
+      db.prepare(
+        `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
+      ).run(new Date().toISOString(), closePriceCents, realized, p.id);
+      adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
+      log.info('position.settled.sim', { ticker: p.ticker, win, realized });
+
+      const today = new Date().toISOString().slice(0, 10);
+      db.prepare(`
+        INSERT INTO pnl_history (date, realized_pnl_usd, trades_closed)
+        VALUES (?, ?, 1)
+        ON CONFLICT(date) DO UPDATE SET
+          realized_pnl_usd = realized_pnl_usd + ?,
+          trades_closed = trades_closed + 1
+      `).run(today, realized, realized);
+      continue;
+    }
+
+    // ── Live mode: rely on Kalshi API ────────────────────────────────────────
     try {
       const res = await kalshi.getMarket(p.ticker);
       const m = res.market;
@@ -549,34 +616,20 @@ async function settleOpenPositions(args: {
         } else if (m.last_price !== undefined) {
           win = (p.side === 'yes' && m.last_price === 100) || (p.side === 'no' && m.last_price === 0);
         } else {
-          continue; // Cannot determine result yet
+          continue;
         }
-        
         const closePriceCents = win ? 100 : 0;
         const realized = (closePriceCents - p.price_cents) * p.contracts / 100;
-        
-        if (cfg.mode === 'simulation' || cfg.dryRun) {
-          db.prepare(
-            `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
-          ).run(new Date().toISOString(), closePriceCents, realized, p.id);
-          adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
-          log.info('position.settled.sim', { ticker: p.ticker, win, realized });
-        } else {
-          // Live mode handles payout in Kalshi balance, but we still need to update our DB status
-          db.prepare(
-            `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
-          ).run(new Date().toISOString(), closePriceCents, realized, p.id);
-          // In live mode adjustBankroll isn't strictly needed for bankroll (as it's read from API) but we want to track realized PnL
-          adjustBankroll(db, 0, realized);
-          log.info('position.settled.live', { ticker: p.ticker, win, realized });
-        }
-        
-        // Update pnl_history
+        db.prepare(
+          `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='settled' WHERE id=?`,
+        ).run(new Date().toISOString(), closePriceCents, realized, p.id);
+        adjustBankroll(db, 0, realized);
+        log.info('position.settled.live', { ticker: p.ticker, win, realized });
         const today = new Date().toISOString().slice(0, 10);
         db.prepare(`
           INSERT INTO pnl_history (date, realized_pnl_usd, trades_closed)
           VALUES (?, ?, 1)
-          ON CONFLICT(date) DO UPDATE SET 
+          ON CONFLICT(date) DO UPDATE SET
             realized_pnl_usd = realized_pnl_usd + ?,
             trades_closed = trades_closed + 1
         `).run(today, realized, realized);
@@ -595,7 +648,7 @@ function dumpSummary(args: {
   const { db, exposure, cfg } = args;
   try {
     const state = db.prepare('SELECT * FROM bot_state WHERE id = 1').get() as any;
-    const openPos = db.prepare('SELECT ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status = "open" ORDER BY entry_ts DESC').all();
+    const openPos = db.prepare(`SELECT ticker, side, contracts, price_cents, entry_ts FROM positions WHERE status = 'open' ORDER BY entry_ts DESC`).all();
     const recentDecs = db.prepare('SELECT ts, ticker, city, model_prob as model_prob, market_prob as market_prob, edge_pp, side, decision, gate_failures FROM decisions ORDER BY ts DESC LIMIT 50').all();
     const recentOrds = db.prepare('SELECT ts, ticker, side, action, price_cents, count, status, avg_fill_cents FROM orders ORDER BY ts DESC LIMIT 50').all();
     const pnlHist = db.prepare('SELECT date, realized_pnl_usd FROM pnl_history ORDER BY date DESC LIMIT 14').all();

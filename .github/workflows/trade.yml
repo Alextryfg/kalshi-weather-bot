@@ -11,9 +11,15 @@ on:
         default: "simulation"
         type: choice
         options: [simulation, live]
+      reset_sim:
+        description: "Reset simulation DB (start fresh from $1000)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 permissions:
-  contents: write   # needed to commit summary.json to docs/
+  contents: write
   actions: read
   pages: write
   id-token: write
@@ -34,10 +40,10 @@ jobs:
       KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
       KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
       WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago' }}
-      MIN_EDGE_PP: "5.0"         # antes 0.5
-      KELLY_FRACTION: "0.25"     # quarter Kelly no half antes 0.5
-      MAX_TRADE_FRACTION: "0.02" # 2% no 5%antes 0.05
-      STOP_LOSS_PP: "8.0"        # mids no apretarantes 2.0
+      MIN_EDGE_PP: "5.0"
+      KELLY_FRACTION: "0.25"
+      MAX_TRADE_FRACTION: "0.02"
+      STOP_LOSS_PP: "8.0"
       MIN_ORDERBOOK_DEPTH: "50"
       MAX_VOLATILITY_PP_1H: "20"
       MAX_POSITION_FRACTION: "0.10"
@@ -61,22 +67,30 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      # ── Restore DB from stable cache key (not run-id!) ──────────────────────
+      # Using a FIXED key prefix means the same DB survives across runs.
+      # Without this, every run started fresh and positions never settled.
       - name: Restore DB cache
         id: dbcache
         uses: actions/cache@v4
         with:
           path: ./data
-          key: bot-db-${{ github.run_id }}
+          key: bot-db-stable-v1
           restore-keys: |
-            bot-db-
+            bot-db-stable-
 
       - name: Run bot
         run: |
           mkdir -p data docs
+          RESET_FLAG=""
+          if [ "${{ github.event.inputs.reset_sim }}" = "true" ]; then
+            RESET_FLAG="--reset-sim"
+            echo "🔄 Reset sim requested — starting fresh from $1000"
+          fi
           if [ "$EXECUTION_MODE" = "live" ]; then
-            npx ts-node src/bot.ts --live
+            npx ts-node src/bot.ts --live $RESET_FLAG
           else
-            npx ts-node src/bot.ts
+            npx ts-node src/bot.ts $RESET_FLAG
           fi
 
       - name: Commit summary.json to docs/
@@ -88,18 +102,19 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update dashboard [skip ci]"
           git push || true
 
+      # ── Save DB with SAME stable key so next run restores it ─────────────────
       - name: Save DB cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: ./data
-          key: bot-db-${{ github.run_id }}
+          key: bot-db-stable-v1
 
-      - name: Upload artifact
+      - name: Upload artifact (backup)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bot-run-${{ github.run_id }}
           path: data/
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: warn
