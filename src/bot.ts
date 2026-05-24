@@ -61,7 +61,19 @@ import * as crypto from 'crypto';
 // If Kalshi's actual schema differs, override `parseWeatherTicker` here.
 
 const CITY_PREFIX: Record<string, string> = {
-  NY: 'New York', CHI: 'Chicago', LAX: 'Los Angeles', LON: 'London',
+  NY: 'New York',
+  CHI: 'Chicago',
+  LAX: 'Los Angeles',
+  LON: 'London',
+  // ── Añadir estas ──
+  HOU: 'Houston',
+  MIA: 'Miami',
+  DEN: 'Denver',
+  MSP: 'Minneapolis',
+  SF: 'San Francisco',
+  PHL: 'Philadelphia',
+  DAL: 'Dallas',
+  ATL: 'Atlanta',
 };
 
 interface ParsedTicker {
@@ -295,6 +307,12 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
   } catch (e) {
     log.warn('orderbook.failed.using_quotes', { ticker: market.ticker, err: (e as Error).message });
     book = summarizeFromMarketQuotes(market);
+  }
+
+  // Gate 0: skip one-sided books (mid es fantasma, no hay liquidez real)
+  if (book.yesBid === 0 && book.yesAsk === 100) {
+    log.debug('market.no_book.skip', { ticker: market.ticker });
+    return;
   }
 
   recordPriceObservation(

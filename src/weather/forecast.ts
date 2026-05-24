@@ -25,10 +25,19 @@ export interface CityCoords {
 
 /** Hard-coded coordinates so we don't need a geocoding hop every run. */
 export const CITY_COORDS: Record<string, CityCoords> = {
-  'New York':    { name: 'New York',    latitude: 40.7128,  longitude: -74.0060, timezone: 'America/New_York' },
-  'Chicago':     { name: 'Chicago',     latitude: 41.8781,  longitude: -87.6298, timezone: 'America/Chicago' },
-  'Los Angeles': { name: 'Los Angeles', latitude: 34.0522,  longitude: -118.2437, timezone: 'America/Los_Angeles' },
-  'London':      { name: 'London',      latitude: 51.5074,  longitude:  -0.1278, timezone: 'Europe/London' },
+  'New York': { name: 'New York', latitude: 40.7128, longitude: -74.0060, timezone: 'America/New_York' },
+  'Chicago': { name: 'Chicago', latitude: 41.8781, longitude: -87.6298, timezone: 'America/Chicago' },
+  'Los Angeles': { name: 'Los Angeles', latitude: 34.0522, longitude: -118.2437, timezone: 'America/Los_Angeles' },
+  'London': { name: 'London', latitude: 51.5074, longitude: -0.1278, timezone: 'Europe/London' },
+  // ── Añadir estas ──────────────────────────────────────────────
+  'Houston': { name: 'Houston', latitude: 29.7604, longitude: -95.3698, timezone: 'America/Chicago' },
+  'Miami': { name: 'Miami', latitude: 25.7617, longitude: -80.1918, timezone: 'America/New_York' },
+  'Denver': { name: 'Denver', latitude: 39.7392, longitude: -104.9903, timezone: 'America/Denver' },
+  'Minneapolis': { name: 'Minneapolis', latitude: 44.9778, longitude: -93.2650, timezone: 'America/Chicago' },
+  'San Francisco': { name: 'San Francisco', latitude: 37.7749, longitude: -122.4194, timezone: 'America/Los_Angeles' },
+  'Philadelphia': { name: 'Philadelphia', latitude: 39.9526, longitude: -75.1652, timezone: 'America/New_York' },
+  'Dallas': { name: 'Dallas', latitude: 32.7767, longitude: -96.7970, timezone: 'America/Chicago' },
+  'Atlanta': { name: 'Atlanta', latitude: 33.7490, longitude: -84.3880, timezone: 'America/New_York' },
 };
 
 export interface HourlyForecast {

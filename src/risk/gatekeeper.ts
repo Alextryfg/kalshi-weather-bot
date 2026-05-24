@@ -66,7 +66,7 @@ export function checkRiskGates(g: GateInput): GateResult {
   if (fraction > g.cfg.maxPositionFraction) {
     reasons.push(
       `gate3_concentration: would be ${(fraction * 100).toFixed(1)}% of bankroll ` +
-        `(> ${(g.cfg.maxPositionFraction * 100).toFixed(1)}%)`,
+      `(> ${(g.cfg.maxPositionFraction * 100).toFixed(1)}%)`,
     );
   }
 
@@ -76,7 +76,7 @@ export function checkRiskGates(g: GateInput): GateResult {
   if (dailyLossFrac >= g.cfg.dailyLossCapFraction) {
     reasons.push(
       `gate4_daily_loss: today -${(dailyLossFrac * 100).toFixed(1)}% ` +
-        `>= cap ${(g.cfg.dailyLossCapFraction * 100).toFixed(1)}%`,
+      `>= cap ${(g.cfg.dailyLossCapFraction * 100).toFixed(1)}%`,
     );
   }
 

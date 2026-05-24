@@ -39,7 +39,7 @@ jobs:
       KALSHI_API_BASE: ${{ vars.KALSHI_API_BASE || 'https://external-api.demo.kalshi.co/trade-api/v2' }}
       KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
       KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
-      WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago' }}
+      WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago,Los Angeles,Houston,Miami,Denver,Minneapolis,San Francisco,Philadelphia,Dallas,Atlanta' }}
       MIN_EDGE_PP: "5.0"
       KELLY_FRACTION: "0.25"
       MAX_TRADE_FRACTION: "0.02"
