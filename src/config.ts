@@ -1,12 +1,8 @@
 /**
  * Central configuration module.
  *
- * Loads all configuration from environment variables and CLI flags, validates
- * them, and exposes a single immutable `config` object to the rest of the bot.
- *
- * Critical safety invariant: live trading requires BOTH `EXECUTION_MODE=live`
- * env var AND `--live` CLI flag. This dual-control prevents accidental real
- * trades from a stray env file or a stray CLI command.
+ * Dual-control invariant: live trading requires BOTH EXECUTION_MODE=live
+ * env var AND --live CLI flag.
  */
 
 import 'dotenv/config';
@@ -39,6 +35,16 @@ export interface BotConfig {
   maxPositionFraction: number;
   dailyLossCapFraction: number;
   minHoursToSettlement: number;
+  minPriceCents: number;
+  maxPriceCents: number;
+
+  // Forecast features
+  /** Usar GFS ensemble 31 miembros como fuente principal (default true) */
+  enableEnsemble: boolean;
+  /** Aplicar corrección de bias empírica por ciudad (default true) */
+  enableBiasCorrection: boolean;
+  /** Integrar observación METAR en tiempo real para ajuste intraday (default true) */
+  enableMetar: boolean;
 
   // Infra
   dbPath: string;
@@ -62,18 +68,18 @@ function readEnvNum(name: string, fallback: number): number {
   return n;
 }
 
+function readEnvBool(name: string, fallback: boolean): boolean {
+  const v = process.env[name];
+  if (v === undefined || v === '') return fallback;
+  return v.toLowerCase() === 'true' || v === '1';
+}
+
 function loadPrivateKey(): string {
-  // Allow either inline PEM or a file path on disk.
   const path = process.env.KALSHI_PRIVATE_KEY_PATH;
-  if (path && path.trim() !== '') {
-    return fs.readFileSync(path, 'utf8');
-  }
+  if (path && path.trim() !== '') return fs.readFileSync(path, 'utf8');
   const inline = process.env.KALSHI_PRIVATE_KEY;
-  if (inline && inline.trim() !== '') {
-    // Allow `\n` literal sequences in env files to be expanded to real newlines.
-    return inline.replace(/\\n/g, '\n');
-  }
-  return ''; // empty is OK in simulation mode
+  if (inline && inline.trim() !== '') return inline.replace(/\\n/g, '\n');
+  return '';
 }
 
 export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
@@ -87,29 +93,24 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
     throw new Error(`EXECUTION_MODE must be 'simulation' or 'live', got '${envMode}'`);
   }
 
-  // Dual-control: live requires BOTH env=live AND --live flag.
-  // Any conflict downgrades to simulation, loudly.
   let mode: ExecutionMode = 'simulation';
   if (envMode === 'live' && wantsLive && !wantsSim) {
     mode = 'live';
   } else if (envMode === 'live' || wantsLive) {
     console.warn(
-      '[config] Live mode requested but missing other half of dual-control ' +
-        '(need both EXECUTION_MODE=live AND --live flag). Falling back to simulation.',
+      '[config] Live mode requested but missing dual-control ' +
+      '(need both EXECUTION_MODE=live AND --live). Falling back to simulation.',
     );
   }
 
   const kalshiKeyId = process.env.KALSHI_API_KEY_ID ?? '';
   const privKey = loadPrivateKey();
-
   if (mode === 'live' && (!kalshiKeyId || !privKey)) {
     throw new Error('Live mode requires KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY[_PATH]');
   }
 
   const cities = readEnv('WEATHER_CITIES', 'New York,Chicago')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .split(',').map(s => s.trim()).filter(Boolean);
 
   return {
     mode,
@@ -122,18 +123,24 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
     kalshiPrivateKeyPem: privKey,
 
     weatherCities: cities,
-    minEdgePp: readEnvNum('MIN_EDGE_PP', 0.5),
-    kellyFraction: readEnvNum('KELLY_FRACTION', 0.5),
-    maxTradeFraction: readEnvNum('MAX_TRADE_FRACTION', 0.05),
-    stopLossPp: readEnvNum('STOP_LOSS_PP', 2.0),
+    minEdgePp: readEnvNum('MIN_EDGE_PP', 5.0),
+    kellyFraction: readEnvNum('KELLY_FRACTION', 0.25),
+    maxTradeFraction: readEnvNum('MAX_TRADE_FRACTION', 0.02),
+    stopLossPp: readEnvNum('STOP_LOSS_PP', 8.0),
 
     minOrderbookDepth: readEnvNum('MIN_ORDERBOOK_DEPTH', 50),
     maxVolatilityPp1h: readEnvNum('MAX_VOLATILITY_PP_1H', 20),
     maxPositionFraction: readEnvNum('MAX_POSITION_FRACTION', 0.10),
     dailyLossCapFraction: readEnvNum('DAILY_LOSS_CAP_FRACTION', 0.10),
     minHoursToSettlement: readEnvNum('MIN_HOURS_TO_SETTLEMENT', 6),
+    minPriceCents: readEnvNum('MIN_PRICE_CENTS', 10),
+    maxPriceCents: readEnvNum('MAX_PRICE_CENTS', 90),
+
+    enableEnsemble: readEnvBool('ENABLE_ENSEMBLE', true),
+    enableBiasCorrection: readEnvBool('ENABLE_BIAS_CORRECTION', true),
+    enableMetar: readEnvBool('ENABLE_METAR', true),
 
     dbPath: readEnv('DB_PATH', './data/bot.db'),
-    logLevel: (readEnv('LOG_LEVEL', 'info') as BotConfig['logLevel']),
+    logLevel: readEnv('LOG_LEVEL', 'info') as BotConfig['logLevel'],
   };
 }

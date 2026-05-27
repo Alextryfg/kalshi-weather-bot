@@ -1,14 +1,13 @@
 /**
- * 5-gate risk filter. EVERY potential trade must pass ALL FIVE gates.
+ * Risk gates. EVERY potential trade must pass ALL gates.
  *
- * Gate 1 — Liquidity:        order-book depth at top of book >= MIN_ORDERBOOK_DEPTH
- * Gate 2 — Volatility:       price hasn't moved more than MAX_VOLATILITY_PP_1H in the last hour
- * Gate 3 — Concentration:    after this trade, position notional ≤ MAX_POSITION_FRACTION of bankroll
- * Gate 4 — Daily loss cap:   today's realized P&L isn't worse than -DAILY_LOSS_CAP_FRACTION
- * Gate 5 — Settlement clock: market settlement is at least MIN_HOURS_TO_SETTLEMENT away
- *
- * Each gate returns a Reason string so the decision log explains *why* a
- * candidate was rejected.
+ * Gate 0a — Extreme price:   limit price within [minPriceCents, maxPriceCents]
+ * Gate 0b — Crossing sides:  no open position on same city+date with opposite side
+ * Gate 1  — Liquidity:       counterparty depth >= MIN_ORDERBOOK_DEPTH
+ * Gate 2  — Volatility:      price hasn't moved > MAX_VOLATILITY_PP_1H in last hour
+ * Gate 3  — Concentration:   after trade, position notional <= MAX_POSITION_FRACTION
+ * Gate 4  — Daily loss cap:  today's realized P&L not worse than -DAILY_LOSS_CAP_FRACTION
+ * Gate 5  — Settlement clock: >= MIN_HOURS_TO_SETTLEMENT remaining
  */
 
 import type { BotConfig } from '../config';
@@ -27,19 +26,38 @@ export interface GateInput {
   exposure: ExposureSnapshot;
   /** Notional USD this trade would add to ticker's position. */
   proposedNotionalUsd: number;
+  /** Open positions on the same city+date (to detect crossing sides). */
+  openPositionsOnDate: { ticker: string; side: 'yes' | 'no' }[];
 }
 
 export interface GateResult {
   pass: boolean;
-  reasons: string[]; // empty when pass = true
+  reasons: string[];
 }
 
 export function checkRiskGates(g: GateInput): GateResult {
   const reasons: string[] = [];
 
-  // Gate 1: liquidity — check the side we're actually buying into
-  // For YES: we need NO-side depth (they're our counterparty)
-  // For NO:  we need YES-side depth (they're our counterparty)
+  // Gate 0a: extreme price — books with 5¢ or 95¢ limit prices are phantom liquidity
+  const limitPrice = g.side === 'yes' ? g.book.yesAsk : (100 - g.book.yesBid);
+  if (limitPrice < g.cfg.minPriceCents || limitPrice > g.cfg.maxPriceCents) {
+    reasons.push(
+      `gate0a_extreme_price: limit ${limitPrice}¢ outside [${g.cfg.minPriceCents}, ${g.cfg.maxPriceCents}]`,
+    );
+  }
+
+  // Gate 0b: crossing sides — don't open YES if already holding NO on same city+date
+  for (const existing of g.openPositionsOnDate) {
+    if (existing.side !== g.side) {
+      reasons.push(
+        `gate0b_crossing: already have ${existing.side.toUpperCase()} on ${existing.ticker}, ` +
+        `would cross with ${g.side.toUpperCase()} on ${g.market.ticker}`,
+      );
+      break;
+    }
+  }
+
+  // Gate 1: liquidity — check counterparty depth
   const relevantDepth = g.side === 'yes' ? g.book.noBidSize : g.book.yesBidSize;
   if (relevantDepth < g.cfg.minOrderbookDepth) {
     reasons.push(
@@ -47,11 +65,11 @@ export function checkRiskGates(g: GateInput): GateResult {
     );
   }
 
-  // Gate 2: volatility — max - min midpoint movement (pp) in window
+  // Gate 2: volatility — max-min movement in 1h window
   if (g.recentMidsCents.length >= 2) {
     const hi = Math.max(...g.recentMidsCents);
     const lo = Math.min(...g.recentMidsCents);
-    const movePp = hi - lo; // 1 cent = 1pp
+    const movePp = hi - lo;
     if (movePp > g.cfg.maxVolatilityPp1h) {
       reasons.push(
         `gate2_volatility: 1h range ${movePp.toFixed(1)}pp > ${g.cfg.maxVolatilityPp1h}pp`,
@@ -59,7 +77,7 @@ export function checkRiskGates(g: GateInput): GateResult {
     }
   }
 
-  // Gate 3: concentration — proposed + existing on this ticker vs bankroll
+  // Gate 3: concentration
   const existingOnTicker = g.exposure.byTicker.get(g.market.ticker) ?? 0;
   const afterUsd = existingOnTicker + g.proposedNotionalUsd;
   const fraction = afterUsd / Math.max(0.01, g.exposure.bankrollUsd);
@@ -71,7 +89,7 @@ export function checkRiskGates(g: GateInput): GateResult {
   }
 
   // Gate 4: daily loss cap
-  const dailyLossUsd = -g.exposure.realizedPnlTodayUsd; // positive when losing
+  const dailyLossUsd = -g.exposure.realizedPnlTodayUsd;
   const dailyLossFrac = dailyLossUsd / Math.max(0.01, g.exposure.bankrollUsd);
   if (dailyLossFrac >= g.cfg.dailyLossCapFraction) {
     reasons.push(

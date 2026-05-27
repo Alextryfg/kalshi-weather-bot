@@ -22,6 +22,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+// Añadir nwsHoursForDate al import existente:
+import { fetchForecasts, CityForecast, CITY_COORDS, nwsHoursForDate } from './weather/forecast';
 import { loadConfig, BotConfig } from './config';
 import { log, setLogLevel } from './logger';
 import {
@@ -31,7 +33,6 @@ import {
 import { KalshiClient, KalshiMarket } from './kalshi/client';
 import { OrdersApi } from './kalshi/orders';
 import { PositionsApi } from './kalshi/positions';
-import { fetchForecasts, CityForecast, CITY_COORDS } from './weather/forecast';
 import { probabilityForTempMarket } from './weather/models';
 import { summarizeBook, summarizeFromMarketQuotes, BookSummary } from './engine/pricing';
 import { computeEdge } from './engine/edge';
@@ -206,7 +207,7 @@ async function main(): Promise<void> {
     await settleOpenPositions({ cfg, db, kalshi });
 
     // 1. Fetch forecasts
-    const forecasts = await fetchForecasts(cfg.weatherCities);
+    const forecasts = await fetchForecasts(cfg.weatherCities, cfg.enableMetar);
     if (forecasts.size === 0) {
       log.error('bot.no_forecasts');
       return;
@@ -292,7 +293,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
     log.debug('market.no_forecast_for_city', { ticker: market.ticker, city: parsed.city });
     return;
   }
-  const hours = hoursForDate(fc, parsed.date);
+  const hours = nwsHoursForDate(fc, parsed.date);
   if (hours.length === 0) {
     log.debug('market.no_hours_in_window', { ticker: market.ticker, date: parsed.date });
     return;
@@ -331,6 +332,9 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
     comparison: parsed.comparison,
     thresholdF: parsed.thresholdF,
     upperThresholdF: parsed.upperF,
+    cityName: parsed.city,                          // ← bias correction
+    observedMaxSoFarF: fc.metarObservedMaxF,        // ← METAR intraday
+    enableBiasCorrection: cfg.enableBiasCorrection,
   });
 
   const decision = computeEdge(modelProb, book, cfg.minEdgePp);
@@ -366,7 +370,15 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
   });
   const proposedNotionalUsd = (provisionalSize.contracts * pricePer) / 100;
 
-  // Risk gates
+  // Obtener posiciones abiertas en la misma ciudad+fecha para detectar cruces
+  const openPositionsOnDate = (db
+    .prepare(`SELECT ticker, side FROM positions WHERE status = 'open'`)
+    .all() as { ticker: string; side: 'yes' | 'no' }[])
+    .filter((p) => {
+      const pp = parseWeatherTicker(p.ticker);
+      return pp && pp.city === parsed.city && pp.date === parsed.date;
+    });
+
   const gates = checkRiskGates({
     cfg,
     market,
@@ -375,6 +387,7 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
     recentMidsCents: recentMids,
     exposure,
     proposedNotionalUsd,
+    openPositionsOnDate,  // <-- añadir esto
   });
 
   if (!gates.pass || provisionalSize.contracts < 1) {
