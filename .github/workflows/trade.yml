@@ -49,6 +49,11 @@ jobs:
       MAX_POSITION_FRACTION: "0.10"
       DAILY_LOSS_CAP_FRACTION: "0.10"
       MIN_HOURS_TO_SETTLEMENT: "6"
+      MIN_PRICE_CENTS: "10"
+      MAX_PRICE_CENTS: "92"
+      ENABLE_ENSEMBLE: "true"
+      ENABLE_BIAS_CORRECTION: "true"
+      ENABLE_METAR: "true"
       DB_PATH: ./data/bot.db
       LOG_LEVEL: info
 
