@@ -72,17 +72,18 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # ── Restore DB from stable cache key (not run-id!) ──────────────────────
-      # Using a FIXED key prefix means the same DB survives across runs.
-      # Without this, every run started fresh and positions never settled.
+      # ── Restore DB — busca el cache del run anterior más reciente ────────────
+      # Usamos run_id en la clave de guardado para que cada run cree una entrada
+      # nueva (los caches de GitHub son inmutables y no se pueden sobreescribir).
+      # restore-keys: encuentra automáticamente el más reciente con ese prefijo.
       - name: Restore DB cache
         id: dbcache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ./data
-          key: bot-db-stable-v1
+          key: bot-db-v2-${{ github.run_id }}
           restore-keys: |
-            bot-db-stable-
+            bot-db-v2-
 
       - name: Run bot
         run: |
@@ -90,7 +91,7 @@ jobs:
           RESET_FLAG=""
           if [ "${{ github.event.inputs.reset_sim }}" = "true" ]; then
             RESET_FLAG="--reset-sim"
-            echo "🔄 Reset sim requested — starting fresh from $1000"
+            echo "Reset sim requested — starting fresh from $1000"
           fi
           if [ "$EXECUTION_MODE" = "live" ]; then
             npx ts-node src/bot.ts --live $RESET_FLAG
@@ -107,13 +108,13 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update dashboard [skip ci]"
           git push || true
 
-      # ── Save DB with SAME stable key so next run restores it ─────────────────
+      # ── Guardar DB con run_id único — siempre funciona, nunca colisiona ──────
       - name: Save DB cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: ./data
-          key: bot-db-stable-v1
+          key: bot-db-v2-${{ github.run_id }}
 
       - name: Upload artifact (backup)
         if: always()
