@@ -1,74 +1,177 @@
-# ─── CORRECCIÓN CRÍTICA DEL WORKFLOW ─────────────────────────────────────────
-# Guardar como: .github/workflows/trade.yml
-#
-# BUG ORIGINAL: cache key "bot-db-stable-v1" era inmutable → DB reseteaba cada run
-# FIX: Usar run_id en la key + restore-keys para encontrar la cache más reciente
-# ─────────────────────────────────────────────────────────────────────────────
-
-name: kalshi-weather-bot
+name: kalshi-weather-trade
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # cada 30 minutos
+    - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Execution mode"
+        required: false
+        default: "simulation"
+        type: choice
+        options: [simulation, live]
+      reset_sim:
+        description: "Reset simulation DB (start fresh from $1000)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: write
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kalshi-trade
+  cancel-in-progress: false  # nunca cancelar un run en curso (podría dejar posiciones sin registrar)
 
 jobs:
   trade:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      EXECUTION_MODE: ${{ github.event.inputs.mode || 'simulation' }}
+      SIM_INITIAL_CAPITAL: "1000"
+      KALSHI_API_BASE: ${{ vars.KALSHI_API_BASE || 'https://external-api.demo.kalshi.co/trade-api/v2' }}
+      KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+      KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+      WEATHER_CITIES: ${{ vars.WEATHER_CITIES || 'New York,Chicago,Los Angeles,Houston,Miami,Denver,Minneapolis,San Francisco,Philadelphia,Dallas,Atlanta' }}
+      # ── Strategy ────────────────────────────────────────────────────────────
+      MIN_EDGE_PP: "5.0"
+      KELLY_FRACTION: "0.25"
+      MAX_TRADE_FRACTION: "0.02"
+      STOP_LOSS_PP: "8.0"
+      # ── Risk gates ──────────────────────────────────────────────────────────
+      MIN_ORDERBOOK_DEPTH: "20"
+      MAX_VOLATILITY_PP_1H: "20"
+      MAX_POSITION_FRACTION: "0.10"
+      DAILY_LOSS_CAP_FRACTION: "0.10"
+      MIN_HOURS_TO_SETTLEMENT: "6"
+      MIN_PRICE_CENTS: "10"
+      MAX_PRICE_CENTS: "92"
+      # ── Features ────────────────────────────────────────────────────────────
+      ENABLE_ENSEMBLE: "true"
+      ENABLE_BIAS_CORRECTION: "true"
+      ENABLE_METAR: "true"
+      # ── Infra ───────────────────────────────────────────────────────────────
+      DB_PATH: ./data/bot.db
+      LOG_LEVEL: info
+
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: npm ci
-
-      # ── CACHE FIX ─────────────────────────────────────────────────────────
-      # KEY: Incluye run_id → crea NUEVA entrada cada run (nunca sobrescribe)
-      # RESTORE-KEYS: Prefijo → encuentra automáticamente la entrada más reciente
-      # RESULTADO: El historial de DB persiste correctamente entre runs
-      - name: Restore DB cache
-        uses: actions/cache@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          path: data/bot.db
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      # ── PASO 1 (rápido): intentar restaurar desde cache de GitHub Actions ────
+      # Estrategia: la KEY incluye run_id → cada run crea una entrada NUEVA
+      # (los caches de GitHub son inmutables). restore-keys encuentra el más
+      # reciente con el prefijo "bot-db-v2-" automáticamente.
+      - name: Restore DB — cache
+        id: dbcache
+        uses: actions/cache/restore@v4
+        with:
+          path: ./data
           key: bot-db-v2-${{ github.run_id }}
           restore-keys: |
             bot-db-v2-
 
-      - name: Create data dir
-        run: mkdir -p data
-
-      - name: Run bot
+      # ── PASO 2 (fallback): si el cache falló, restaurar desde artifact ───────
+      # Por qué: el cache de GitHub puede tener un delay de propagación de 2-5
+      # minutos entre runs. En crons de 30 min esto es raro, pero pasa.
+      # Los artifacts son inmediatos y siempre disponibles (sin delay).
+      # Requiere que el step anterior NO haya encontrado el cache (cache-hit != true).
+      - name: Restore DB — artifact fallback
+        if: steps.dbcache.outputs.cache-hit != 'true'
         env:
-          EXECUTION_MODE: simulation
-          # ─── Risk parameters (calibrados post-bug-fix) ─────────────────────
-          MIN_EDGE_PP: "5.0"
-          KELLY_FRACTION: "0.25"
-          MAX_TRADE_FRACTION: "0.02"
-          STOP_LOSS_PP: "8.0"
-          MIN_ORDERBOOK_DEPTH: "20"    # ← bajado de 50 (liquidez real del mercado)
-          MAX_PRICE_CENTS: "92"        # ← subido de 90 (permite limit 91¢)
-          MAX_POSITION_FRACTION: "0.10"
-          DAILY_LOSS_CAP_FRACTION: "0.10"
-          MIN_HOURS_TO_SETTLEMENT: "6"
-          # ─── Feature flags ─────────────────────────────────────────────────
-          ENABLE_ENSEMBLE: "true"
-          ENABLE_BIAS_CORRECTION: "true"
-          ENABLE_METAR: "true"
-          # ─── Cities ────────────────────────────────────────────────────────
-          WEATHER_CITIES: "New York,Chicago,Los Angeles,Houston,Miami,Denver,Minneapolis,San Francisco,Philadelphia,Dallas,Atlanta"
-          # ─── Kalshi (demo endpoint, no key needed) ─────────────────────────
-          KALSHI_API_BASE: "https://demo-api.kalshi.co/trade-api/v2"
-          DB_PATH: "./data/bot.db"
-          LOG_LEVEL: "info"
-        run: npx ts-node src/bot.ts
-
-      - name: Upload summary to pages
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.email "bot@github"
-          git config user.name "Kalshi Bot"
-          git add docs/summary.json
-          git diff --staged --quiet || git commit -m "bot: update summary [skip ci]"
-          git push
+          echo "Cache miss — buscando artifact de respaldo..."
+          ARTIFACT_JSON=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=10&name=bot-db-backup" \
+            --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | last' 2>/dev/null || echo "")
+          ARTIFACT_ID=$(echo "$ARTIFACT_JSON" | jq -r '.id // empty' 2>/dev/null || echo "")
+          if [ -n "$ARTIFACT_ID" ]; then
+            echo "Descargando artifact ID=$ARTIFACT_ID..."
+            mkdir -p data
+            gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > /tmp/db-backup.zip
+            unzip -o /tmp/db-backup.zip -d data/ 2>/dev/null || true
+            if [ -f data/bot.db ]; then
+              echo "✓ DB restaurada desde artifact $ARTIFACT_ID"
+              ls -lh data/bot.db
+            else
+              echo "⚠ Artifact descargado pero bot.db no encontrado — empezando sin DB"
+            fi
+          else
+            echo "No hay artifacts disponibles — empezando con DB vacía (primer run o reset intencional)"
+          fi
+
+      # ── Diagnóstico: loguear estado de la DB antes del run ───────────────────
+      - name: DB status
+        run: |
+          mkdir -p data docs
+          if [ -f data/bot.db ]; then
+            echo "✓ DB encontrada: $(ls -lh data/bot.db | awk '{print $5}')"
+            # Mostrar posiciones abiertas para verificar que la persistencia funciona
+            sqlite3 data/bot.db "SELECT COUNT(*) || ' posiciones abiertas' FROM positions WHERE status='open';" 2>/dev/null || echo "  (DB vacía o schema aún no creado)"
+            sqlite3 data/bot.db "SELECT 'Bankroll: $' || ROUND(bankroll_usd,2) FROM bot_state WHERE id=1;" 2>/dev/null || true
+          else
+            echo "⚠ DB no encontrada — este run empezará con bankroll inicial de \$${SIM_INITIAL_CAPITAL}"
+          fi
+
+      # ── Ejecutar bot ─────────────────────────────────────────────────────────
+      - name: Run bot
+        run: |
+          RESET_FLAG=""
+          if [ "${{ github.event.inputs.reset_sim }}" = "true" ]; then
+            RESET_FLAG="--reset-sim"
+            echo "Reset sim solicitado — empezando desde \$1000"
+          fi
+          if [ "$EXECUTION_MODE" = "live" ]; then
+            npx ts-node src/bot.ts --live $RESET_FLAG
+          else
+            npx ts-node src/bot.ts $RESET_FLAG
+          fi
+
+      # ── Publicar dashboard ───────────────────────────────────────────────────
+      - name: Commit summary.json
+        if: always()
+        run: |
+          git config user.name "kalshi-bot"
+          git config user.email "bot@kalshi-weather"
+          git add docs/summary.json || true
+          git diff --staged --quiet || git commit -m "chore: update dashboard [skip ci]"
+          git push || true
+
+      # ── Guardar DB en cache (inmutable, run_id único) ─────────────────────────
+      - name: Save DB — cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ./data
+          key: bot-db-v2-${{ github.run_id }}
+
+      # ── Guardar DB en artifact (backup persistente, 30 días) ─────────────────
+      # Este es el fallback para el próximo run si el cache falla.
+      # Nombre fijo "bot-db-backup" para que el step de restore lo encuentre.
+      - name: Save DB — artifact backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-db-backup
+          path: data/
+          retention-days: 30
+          overwrite: true          # sobreescribir el artifact anterior (mismo nombre)
+          if-no-files-found: warn
