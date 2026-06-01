@@ -1,7 +1,18 @@
 /**
  * Modelo de probabilidad para contratos de temperatura Kalshi.
  *
- * Mejoras vs versión anterior:
+ * CAMBIOS v2 (01-Jun-2026):
+ *
+ * 1. PROBABILITY FLOOR [0.02, 0.98]:
+ *    El modelo nunca es más confiado que 98:2. Certeza extrema casi siempre
+ *    es sobreajuste del modelo, no realidad. Limita también el tamaño Kelly.
+ *
+ * 2. SIGMA MÍNIMA PARA "BETWEEN" = 4.5°F:
+ *    Los contratos between tienen ventana de 2°F. Con sigma=3°F y mu a 5+°F
+ *    del rango, P(between) cae a <0.01% aunque el mercado ponga 15-20%.
+ *    4.5°F produce colas más realistas en línea con los precios de mercado.
+ *
+ * MEJORAS vs versión anterior:
  *
  * 1. ENSEMBLE REAL: cuando hay miembros disponibles (GFS 31 miembros), calcula
  *    el extremo diario por miembro y extrae la sigma de esa distribución.
@@ -10,9 +21,6 @@
  *
  * 2. BIAS CORRECTION: aplica corrección empírica por ciudad basada en biases
  *    conocidos de los modelos NWP vs observaciones NWS históricas.
- *    - GFS: cold bias sistemático en temperature_2m
- *    - ECMWF IFS: subestima ciclo diurno ~1-2K
- *    - Efectos microclimáticos por estación (KLAX costera, KNYC urbano, etc.)
  *
  * 3. AJUSTE INTRADAY: si hay observación METAR disponible y la temperatura
  *    ya supera la media del modelo, actualiza la distribución en consecuencia.
@@ -24,36 +32,37 @@ import { HourlyForecast } from './forecast';
 
 const BASELINE_SIGMA_F = 3.0;
 
+// Sigma mínima para contratos "between" (ventana 2°F).
+// Razonamiento: P(2°F window) con sigma=3°F a 5°F de mu es ~0.2%.
+// El mercado raramente pone <2% incluso para rangos alejados.
+// 4.5°F produce P~3-6% para mu 4-5°F fuera del rango → más conservador.
+const BETWEEN_SIGMA_MIN_F = 4.5;
+
+// Floor/ceil de probabilidad. El modelo nunca puede ser más confiado que 98:2.
+// Previene posiciones de tamaño extremo y pérdidas catatastróficas si el
+// modelo se equivoca (lo cual ocurre más seguido de lo que la matemática sugiere).
+const PROB_FLOOR = 0.02;
+const PROB_CEIL = 0.98;
+
 /**
  * Corrección de bias empírica por ciudad en °F.
  *
  * Definición: bias = media_ensemble - observado_NWS
  * → positivo: el modelo corre caliente → bajamos mu
  * → negativo: el modelo corre frío    → subimos mu
- *
- * Fuentes:
- * - GFS cold bias documentado en estudios de verificación NOAA (Zheng et al. 2017)
- * - ECMWF IFS: underestima ciclo diurno ~1-2K (cold bias día, warm bias noche)
- * - Efectos estación-específicos calibrados empíricamente:
- *   KLAX: capa marina, modelo sobreestima 2-3°F en verano
- *   KSFO: niebla/stratus matutino, modelo sobreestima fuertemente
- *   KNYC: isla de calor urbano mal capturado, modelo ligeramente frío
- *
- * CALIBRACIÓN: estos valores son puntos de partida. A medida que acumules
- * resultados en pnl_history, ajusta usando la media de (temp_prevista - temp_real).
  */
 export const BIAS_CORRECTION_F: Record<string, number> = {
-  'New York': -0.5,  // KNYC: modelo frío vs isla de calor Central Park
-  'Chicago': +0.5,  // KMDW: aeropuerto más frío que grid del modelo
-  'Los Angeles': +2.0,  // KLAX: capa marina costera, modelo sobreestima fuertemente
-  'Houston': -0.5,  // KHOU: influencia brisa marina subestimada
-  'Miami': -0.3,  // KMIA: bien predicho en general
-  'Denver': +0.5,  // KDEN: modelo corre ligeramente caliente en altiplano
-  'Minneapolis': +0.8,  // KMSP: GFS cold bias pronunciado en latitudes altas
-  'San Francisco': +1.5,  // KSFO: niebla costera, modelo sobreestima significativamente
-  'Philadelphia': -0.3,  // KPHL: bien predicho en general
-  'Dallas': -0.3,  // KDFW: modelo ligeramente frío en verano (GFS)
-  'Atlanta': -0.5,  // KATL: isla de calor aeropuerto subestimada
+  'New York': -0.5,
+  'Chicago': +0.5,
+  'Los Angeles': +2.0,
+  'Houston': -0.5,
+  'Miami': -0.3,
+  'Denver': +0.5,
+  'Minneapolis': +0.8,
+  'San Francisco': +1.5,
+  'Philadelphia': -0.3,
+  'Dallas': -0.3,
+  'Atlanta': -0.5,
 };
 
 // ─── CDF Normal ──────────────────────────────────────────────────────────────
@@ -80,14 +89,6 @@ function aggregateExtremum(
   const allHaveMembers = hours.every(h => h.members && h.members.length >= 2);
 
   if (allHaveMembers) {
-    /**
-     * MÉTODO ENSEMBLE (preciso):
-     * Para cada miembro del ensemble, calculamos el extremo a lo largo del día.
-     * Luego mu y sigma se derivan de esa distribución de extremos.
-     *
-     * Esto captura correctamente la distribución del máximo diario —
-     * que no es Gaussiana aunque las horas individuales lo sean.
-     */
     const numMembers = hours[0].members.length;
     const extremaPerMember: number[] = [];
 
@@ -105,12 +106,6 @@ function aggregateExtremum(
     return { mean: mu, sigma };
   }
 
-  /**
-   * MÉTODO FALLBACK (determinista):
-   * Tomamos la hora con el valor extremo y ensanchamos sigma
-   * para representar la incertidumbre del extremo diario.
-   * hours^0.15 es empíricamente calibrado (verificación NOAA).
-   */
   let pick = hours[0];
   for (const h of hours) {
     if (extremum === 'max' && h.temperatureF > pick.temperatureF) pick = h;
@@ -128,11 +123,8 @@ export interface TempProbInput {
   comparison: 'greater' | 'less' | 'between';
   thresholdF: number;
   upperThresholdF?: number;
-  /** Nombre de ciudad para bias correction (debe coincidir con BIAS_CORRECTION_F) */
   cityName?: string;
-  /** Máximo ya observado vía METAR hoy (null = no disponible) */
   observedMaxSoFarF?: number | null;
-  /** Si true, aplica bias correction (default true) */
   enableBiasCorrection?: boolean;
 }
 
@@ -145,7 +137,6 @@ export function probabilityForTempMarket(input: TempProbInput): number {
   } else if (input.aggregate === 'low') {
     ({ mean: mu, sigma } = aggregateExtremum(input.hours, 'min'));
   } else {
-    // any-hour: media de medias, sigma combinada
     const ms = input.hours.map(h => h.temperatureF);
     mu = ms.reduce((a, b) => a + b, 0) / ms.length;
     const s2 = input.hours.reduce((a, h) => a + h.sigmaF ** 2, 0) / input.hours.length;
@@ -153,18 +144,13 @@ export function probabilityForTempMarket(input: TempProbInput): number {
   }
 
   // ── Bias correction por ciudad ──────────────────────────────────────────
-  // bias > 0: modelo corre caliente → bajamos mu
-  // bias < 0: modelo corre frío    → subimos mu
-  const applyBias = input.enableBiasCorrection !== false; // default true
+  const applyBias = input.enableBiasCorrection !== false;
   if (applyBias && input.cityName) {
     const bias = BIAS_CORRECTION_F[input.cityName] ?? 0;
     mu -= bias;
   }
 
   // ── Ajuste intraday METAR ────────────────────────────────────────────────
-  // Si ya hay temperatura observada HOY que supera la media del modelo,
-  // actualizamos la distribución: mu sube al observado y sigma se reduce
-  // proporcionalmente a las horas que quedan hasta settlement.
   if (
     input.aggregate === 'high' &&
     input.observedMaxSoFarF != null &&
@@ -176,30 +162,51 @@ export function probabilityForTempMarket(input: TempProbInput): number {
       const t = new Date(h.time + ':00Z').getTime();
       return t > nowMs;
     }).length;
-    // Fracción del día que queda [0.05, 1.0] — 0.05 evita sigma→0
     const fracRemaining = Math.max(0.05, Math.min(1.0, hoursRemaining / 24));
-    // Blending: cuanto más tarde, más peso al observado
     mu = input.observedMaxSoFarF * (1 - fracRemaining) + mu * fracRemaining;
     sigma = sigma * Math.sqrt(fracRemaining);
+  }
+
+  // ── Sigma mínima para contratos "between" ─────────────────────────────────
+  // La ventana de un contrato between es de ~2°F. Con sigma=3°F, P(2°F window)
+  // puede caer a 0.001% cuando mu está a 5°F del rango, mientras el mercado
+  // pone 15-20%. Sigma=4.5°F produce colas más realistas.
+  // Ejemplo: mu=70°F, between 77.5-79.5, sigma=3→0.54%, sigma=4.5→3.04%
+  if (input.comparison === 'between') {
+    sigma = Math.max(sigma, BETWEEN_SIGMA_MIN_F);
   }
 
   // Floor de sigma para evitar certezas artificiales
   sigma = Math.max(sigma, 0.5);
 
+  // ── Calcular probabilidad bruta ───────────────────────────────────────────
+  let rawProb: number;
   switch (input.comparison) {
     case 'greater':
-      return 1 - normalCdf(input.thresholdF, mu, sigma);
+      rawProb = 1 - normalCdf(input.thresholdF, mu, sigma);
+      break;
     case 'less':
-      return normalCdf(input.thresholdF, mu, sigma);
+      rawProb = normalCdf(input.thresholdF, mu, sigma);
+      break;
     case 'between': {
       const upper = input.upperThresholdF;
       if (upper == null) throw new Error('between requires upperThresholdF');
-      return normalCdf(upper, mu, sigma) - normalCdf(input.thresholdF, mu, sigma);
+      rawProb = normalCdf(upper, mu, sigma) - normalCdf(input.thresholdF, mu, sigma);
+      break;
     }
+    default:
+      rawProb = 0.5;
   }
+
+  // ── Probability floor/ceil: el modelo nunca es más confiado que 98:2 ──────
+  // Los modelos NWP tienen colas reales no capturadas por la distribución
+  // normal. Certeza extrema (<2% o >98%) casi siempre indica sobreajuste
+  // del modelo, no realidad. Este floor además limita el tamaño Kelly,
+  // previniendo apuestas de tamaño catastrófico en eventos de cola.
+  return Math.max(PROB_FLOOR, Math.min(PROB_CEIL, rawProb));
 }
 
-// ─── Precipitación (sin cambios) ─────────────────────────────────────────────
+// ─── Precipitación ───────────────────────────────────────────────────────────
 
 export interface PrecipProbInput {
   hours: HourlyForecast[];

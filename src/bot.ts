@@ -257,6 +257,11 @@ async function main(): Promise<void> {
     for (const m of candidates) {
       try {
         await processMarket({ cfg, db, kalshi, ordersApi, market: m, forecasts, exposure });
+        // FIX: Refrescar exposure después de cada mercado procesado.
+        // Sin esto, Gate 3 (concentración) no ve posiciones abiertas en el mismo run.
+        if (cfg.mode === 'simulation' || cfg.dryRun) {
+          exposure = getExposureSim(db, cfg.simInitialCapital);
+        }
       } catch (e) {
         log.error('market.process.failed', { ticker: m.ticker, err: (e as Error).message });
       }
@@ -296,6 +301,17 @@ async function processMarket(ctx: ProcessCtx): Promise<void> {
   const hours = nwsHoursForDate(fc, parsed.date);
   if (hours.length === 0) {
     log.debug('market.no_hours_in_window', { ticker: market.ticker, date: parsed.date });
+    return;
+  }
+
+  // FIX: Dedup — no re-entrar si ya hay una posición abierta en este ticker exacto.
+  // Previene el pyramiding que ocurre cuando la DB se resetea entre runs o cuando
+  // el mismo mercado aparece varias veces en el mismo ciclo del bot.
+  const existingPositionOnTicker = (db
+    .prepare(`SELECT id FROM positions WHERE ticker = ? AND status = 'open'`)
+    .get(market.ticker) as { id: number } | undefined);
+  if (existingPositionOnTicker) {
+    log.debug('market.skip.already_positioned', { ticker: market.ticker });
     return;
   }
 
@@ -526,6 +542,47 @@ async function manageOpenPositions(args: {
       // For long YES: mark to mid (yesMidProb*100). For long NO: mark to (1 - mid).
       const markCents = p.side === 'yes' ? book.yesMidProb * 100 : (1 - book.yesMidProb) * 100;
       const movePp = markCents - p.price_cents; // positive = winning
+
+      // FIX: Take-profit — cerrar si ganamos >= 25pp para reducir riesgo binario.
+      // Guía: "comprar barato y vender cuando el consenso cambia a tu favor".
+      // En lugar de esperar al settlement (100/0 binario), asegurar beneficios
+      // cuando el mercado ya se movió significativamente a nuestro favor.
+      const TAKE_PROFIT_PP = 25;
+      if (movePp >= TAKE_PROFIT_PP) {
+        log.info('take_profit.triggered', {
+          ticker: p.ticker,
+          entry: p.price_cents,
+          mark: markCents.toFixed(1),
+          movePp: movePp.toFixed(1),
+        });
+        // Vender al mejor bid disponible (cruzar el spread para garantizar fill)
+        const closePriceCents = p.side === 'yes'
+          ? Math.max(1, book.yesBid)
+          : Math.max(1, 100 - book.yesAsk);
+        if (cfg.mode === 'simulation' || cfg.dryRun) {
+          const realized = (closePriceCents - p.price_cents) * p.contracts / 100;
+          db.prepare(
+            `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='take_profit' WHERE id=?`,
+          ).run(new Date().toISOString(), closePriceCents, realized, p.id);
+          adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
+          log.info('position.closed.sim', { ticker: p.ticker, realized, reason: 'take_profit' });
+        } else {
+          try {
+            await ordersApi.place({
+              ticker: p.ticker,
+              action: 'sell',
+              side: p.side,
+              type: 'limit',
+              count: p.contracts,
+              price: closePriceCents,
+            });
+          } catch (e) {
+            log.error('take_profit.order.failed', { ticker: p.ticker, err: (e as Error).message });
+          }
+        }
+        continue;
+      }
+
       if (-movePp >= cfg.stopLossPp) {
         log.info('stop_loss.triggered', { ticker: p.ticker, entry: p.price_cents, mark: markCents.toFixed(1) });
         // Close: sell same side at best bid (cross the spread).
