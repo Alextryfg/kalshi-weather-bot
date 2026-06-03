@@ -2,8 +2,9 @@
  * Risk gates. EVERY potential trade must pass ALL gates.
  *
  * Gate 0a — Extreme price:   limit price within [minPriceCents, maxPriceCents]
- * Gate 0b — Crossing sides:  no open position on same city+date with opposite side
- * Gate 1  — Liquidity:       counterparty depth >= MIN_ORDERBOOK_DEPTH
+ * Gate 0b — Crossing sides:    no open position on same city+date with opposite side
+ * Gate 0c — City+date limit:  max MAX_POSITIONS_PER_CITY_DATE positions per city per settlement date
+ * Gate 1  — Liquidity:        counterparty depth >= MIN_ORDERBOOK_DEPTH
  * Gate 2  — Volatility:      price hasn't moved > MAX_VOLATILITY_PP_1H in last hour
  * Gate 3  — Concentration:   after trade, position notional <= MAX_POSITION_FRACTION
  * Gate 4  — Daily loss cap:  today's realized P&L not worse than -DAILY_LOSS_CAP_FRACTION
@@ -55,6 +56,17 @@ export function checkRiskGates(g: GateInput): GateResult {
       );
       break;
     }
+  }
+
+  // Gate 0c: city+date concentration — max N posiciones por ciudad+fecha
+  // Previene riesgo correlado: comprar NO en 3 ventanas adyacentes de NY el mismo
+  // día significa que si la temperatura cae en CUALQUIERA de ellas, una pierde.
+  // Límite por defecto: 2 posiciones por ciudad por día.
+  if (g.openPositionsOnDate.length >= g.cfg.maxPositionsPerCityDate) {
+    reasons.push(
+      `gate0c_city_date_limit: already ${g.openPositionsOnDate.length} position(s) ` +
+      `on this city+date (max ${g.cfg.maxPositionsPerCityDate})`,
+    );
   }
 
   // Gate 1: liquidity — check counterparty depth

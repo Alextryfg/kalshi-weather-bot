@@ -565,6 +565,15 @@ async function manageOpenPositions(args: {
             `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='take_profit' WHERE id=?`,
           ).run(new Date().toISOString(), closePriceCents, realized, p.id);
           adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
+          {
+            const today = new Date().toISOString().slice(0, 10);
+            db.prepare(`INSERT INTO pnl_history (date, realized_pnl_usd, trades_closed)
+              VALUES (?, ?, 1)
+              ON CONFLICT(date) DO UPDATE SET
+                realized_pnl_usd = realized_pnl_usd + ?,
+                trades_closed = trades_closed + 1`
+            ).run(today, realized, realized);
+          }
           log.info('position.closed.sim', { ticker: p.ticker, realized, reason: 'take_profit' });
         } else {
           try {
@@ -593,7 +602,17 @@ async function manageOpenPositions(args: {
             `UPDATE positions SET status='closed', exit_ts=?, exit_price_cents=?, realized_pnl_usd=?, close_reason='stop_loss' WHERE id=?`,
           ).run(new Date().toISOString(), closePriceCents, realized, p.id);
           adjustBankroll(db, (closePriceCents * p.contracts) / 100, realized);
-          log.info('position.closed.sim', { ticker: p.ticker, realized });
+          // FIX: registrar en pnl_history (antes solo lo hacía settleOpenPositions)
+          {
+            const today = new Date().toISOString().slice(0, 10);
+            db.prepare(`INSERT INTO pnl_history (date, realized_pnl_usd, trades_closed)
+              VALUES (?, ?, 1)
+              ON CONFLICT(date) DO UPDATE SET
+                realized_pnl_usd = realized_pnl_usd + ?,
+                trades_closed = trades_closed + 1`
+            ).run(today, realized, realized);
+          }
+          log.info('position.closed.sim', { ticker: p.ticker, realized, reason: 'stop_loss' });
         } else {
           // Live: send a sell limit at best bid.
           try {

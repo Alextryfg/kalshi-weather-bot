@@ -37,6 +37,8 @@ export interface BotConfig {
   minHoursToSettlement: number;
   minPriceCents: number;
   maxPriceCents: number;
+  /** Max posiciones abiertas en la misma ciudad+fecha (evita riesgo correlado). */
+  maxPositionsPerCityDate: number;
 
   // Forecast features
   /** Usar GFS ensemble 31 miembros como fuente principal (default true) */
@@ -134,7 +136,8 @@ export function loadConfig(argv: string[] = process.argv.slice(2)): BotConfig {
     dailyLossCapFraction: readEnvNum('DAILY_LOSS_CAP_FRACTION', 0.10),
     minHoursToSettlement: readEnvNum('MIN_HOURS_TO_SETTLEMENT', 6),
     minPriceCents: readEnvNum('MIN_PRICE_CENTS', 10),
-    maxPriceCents: readEnvNum('MAX_PRICE_CENTS', 90),
+    maxPriceCents: readEnvNum('MAX_PRICE_CENTS', 80),
+    maxPositionsPerCityDate: readEnvNum('MAX_POSITIONS_PER_CITY_DATE', 2),
 
     enableEnsemble: readEnvBool('ENABLE_ENSEMBLE', true),
     enableBiasCorrection: readEnvBool('ENABLE_BIAS_CORRECTION', true),
