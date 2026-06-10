@@ -51,18 +51,32 @@ const PROB_CEIL = 0.98;
  * → positivo: el modelo corre caliente → bajamos mu
  * → negativo: el modelo corre frío    → subimos mu
  */
+/**
+ * BIAS_CORRECTION_F — corrección empírica en °F.
+ *
+ * Definición:  bias = mu_ensemble − observado_NWS
+ * Aplicación:  mu -= bias  →  positivo = modelo corre caliente → bajamos mu
+ *
+ * Calibración inicial basada en 7 días (Jun 3-9 2026):
+ *   NY:  modelo ~87°F, real ~80°F  → error +7°F  → corregimos +5°F
+ *   CHI: modelo ~88°F, real ~80°F  → error +8°F  → corregimos +5°F
+ *   LAX: modelo ~76°F, real ~69°F  → error +7°F  → corregimos +6°F (June Gloom)
+ *   DEN: modelo ~91°F, real ~85°F  → error +6°F  → corregimos +3°F (más volátil)
+ *
+ * REVISAR después de 30 trades: bias_real = mean(predicción_modelo - settlement_NWS)
+ */
 export const BIAS_CORRECTION_F: Record<string, number> = {
-  'New York': -0.5,
-  'Chicago': +0.5,
-  'Los Angeles': +2.0,
-  'Houston': -0.5,
-  'Miami': -0.3,
-  'Denver': +0.5,
-  'Minneapolis': +0.8,
-  'San Francisco': +1.5,
-  'Philadelphia': -0.3,
-  'Dallas': -0.3,
-  'Atlanta': -0.5,
+  'New York': +5.0,   // era -0.5 (¡dirección opuesta!)
+  'Chicago': +5.0,   // era +0.5 (10x insuficiente)
+  'Los Angeles': +6.0,   // era +2.0 (3x insuf. + June Gloom persistente)
+  'Houston': +2.0,   // era -0.5
+  'Miami': +1.0,   // era -0.3 (verano fiable, bias pequeño)
+  'Denver': +3.0,   // era +0.5 (volátil, corrección conservadora)
+  'Minneapolis': +3.0,   // era +0.8
+  'San Francisco': +3.0,   // era +1.5
+  'Philadelphia': +5.0,   // era -0.3
+  'Dallas': +2.0,   // era -0.3
+  'Atlanta': +2.0,   // era -0.5
 };
 
 // ─── CDF Normal ──────────────────────────────────────────────────────────────
@@ -151,11 +165,14 @@ export function probabilityForTempMarket(input: TempProbInput): number {
   }
 
   // ── Ajuste intraday METAR ────────────────────────────────────────────────
+  // METAR bidireccional: si el máximo observado es MENOR que mu (warm bias),
+  // corregir mu hacia abajo también. Sin esto, el METAR solo ayuda cuando el
+  // modelo corre frío, pero es inútil para el warm bias sistemático del GFS.
   if (
     input.aggregate === 'high' &&
     input.observedMaxSoFarF != null &&
-    Number.isFinite(input.observedMaxSoFarF) &&
-    input.observedMaxSoFarF > mu
+    Number.isFinite(input.observedMaxSoFarF)
+    // Sin condición "> mu" — funciona en ambas direcciones
   ) {
     const nowMs = Date.now();
     const hoursRemaining = input.hours.filter(h => {
