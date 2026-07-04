@@ -1,11 +1,33 @@
 {
-  "generated_at": "2026-07-04T02:23:48.921Z",
+  "generated_at": "2026-07-04T05:59:09.062Z",
   "mode": "simulation",
   "bankroll_usd": 405.96000000000055,
   "realized_pnl_today_usd": -7.77,
   "realized_pnl_total_usd": -594.0400000000002,
   "open_positions": [],
   "recent_decisions": [
+    {
+      "ts": "2026-07-04T05:59:08.993Z",
+      "ticker": "KXHIGHDEN-26JUL03-B90.5",
+      "city": "Denver",
+      "model_prob": 0.16397242026378567,
+      "market_prob": 0.55,
+      "edge_pp": 33.602757973621436,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 1.0h to close < 6h,size_zero"
+    },
+    {
+      "ts": "2026-07-04T05:59:08.925Z",
+      "ticker": "KXHIGHDEN-26JUL03-B92.5",
+      "city": "Denver",
+      "model_prob": 0.12616979962605201,
+      "market_prob": 0.17,
+      "edge_pp": -0.6169799626052006,
+      "side": "no",
+      "decision": "no_edge",
+      "gate_failures": null
+    },
     {
       "ts": "2026-07-04T02:23:48.837Z",
       "ticker": "KXHIGHDEN-26JUL03-B90.5",
@@ -533,28 +555,6 @@
       "side": "no",
       "decision": "reject",
       "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
-    },
-    {
-      "ts": "2026-07-03T22:00:56.721Z",
-      "ticker": "KXHIGHNY-26JUL03-B102.5",
-      "city": "New York",
-      "model_prob": 0.09984791433608886,
-      "market_prob": 0.29,
-      "edge_pp": 14.015208566391113,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 95¢ outside [10, 80],gate1_liquidity: counterparty depth 8 < 20,size_zero"
-    },
-    {
-      "ts": "2026-07-03T22:00:56.693Z",
-      "ticker": "KXHIGHNY-26JUL03-B104.5",
-      "city": "New York",
-      "model_prob": 0.056681914094838914,
-      "market_prob": 0.11,
-      "edge_pp": 0.33180859051610856,
-      "side": "no",
-      "decision": "no_edge",
-      "gate_failures": null
     }
   ],
   "recent_orders": [
