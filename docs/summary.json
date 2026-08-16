@@ -1,11 +1,66 @@
 {
-  "generated_at": "2026-08-16T05:30:59.564Z",
+  "generated_at": "2026-08-16T06:28:49.056Z",
   "mode": "simulation",
   "bankroll_usd": 42.5400000000006,
   "realized_pnl_today_usd": -2.5,
   "realized_pnl_total_usd": -957.4600000000006,
   "open_positions": [],
   "recent_decisions": [
+    {
+      "ts": "2026-08-16T06:28:48.791Z",
+      "ticker": "KXHIGHDEN-26AUG15-B83.5",
+      "city": "Denver",
+      "model_prob": 0.11867189776341425,
+      "market_prob": 0.34,
+      "edge_pp": 17.132810223658577,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 0.5h to close < 6h,size_zero"
+    },
+    {
+      "ts": "2026-08-16T06:28:48.529Z",
+      "ticker": "KXHIGHLAX-26AUG15-B74.5",
+      "city": "Los Angeles",
+      "model_prob": 0.17103187178119184,
+      "market_prob": 0.04,
+      "edge_pp": 8.103187178119184,
+      "side": "yes",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 1.5h to close < 6h,size_zero"
+    },
+    {
+      "ts": "2026-08-16T06:28:48.442Z",
+      "ticker": "KXHIGHLAX-26AUG15-B76.5",
+      "city": "Los Angeles",
+      "model_prob": 0.17220736123722302,
+      "market_prob": 0.88,
+      "edge_pp": 65.7792638762777,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate1_liquidity: counterparty depth 10 < 20,gate5_settlement: 1.5h to close < 6h"
+    },
+    {
+      "ts": "2026-08-16T06:28:48.353Z",
+      "ticker": "KXHIGHLAX-26AUG15-B78.5",
+      "city": "Los Angeles",
+      "model_prob": 0.14277156891349496,
+      "market_prob": 0.41,
+      "edge_pp": 21.7228431086505,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate5_settlement: 1.5h to close < 6h"
+    },
+    {
+      "ts": "2026-08-16T06:28:48.266Z",
+      "ticker": "KXHIGHLAX-26AUG15-B80.5",
+      "city": "Los Angeles",
+      "model_prob": 0.09746324797386485,
+      "market_prob": 0.04,
+      "edge_pp": 0.7463247973864853,
+      "side": "yes",
+      "decision": "no_edge",
+      "gate_failures": null
+    },
     {
       "ts": "2026-08-16T05:30:59.287Z",
       "ticker": "KXHIGHDEN-26AUG15-B83.5",
@@ -500,61 +555,6 @@
       "side": "yes",
       "decision": "reject",
       "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 1.6h to close < 6h,size_zero"
-    },
-    {
-      "ts": "2026-08-16T03:26:01.993Z",
-      "ticker": "KXHIGHMIA-26AUG15-B94.5",
-      "city": "Miami",
-      "model_prob": 0.16215997909825475,
-      "market_prob": 0.01,
-      "edge_pp": 10.215997909825473,
-      "side": "yes",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 1¢ outside [10, 80],gate5_settlement: 1.6h to close < 6h"
-    },
-    {
-      "ts": "2026-08-16T03:26:01.941Z",
-      "ticker": "KXHIGHMIA-26AUG15-T95",
-      "city": "Miami",
-      "model_prob": 0.02,
-      "market_prob": 0.06,
-      "edge_pp": -1.0000000000000004,
-      "side": "no",
-      "decision": "no_edge",
-      "gate_failures": null
-    },
-    {
-      "ts": "2026-08-16T03:26:01.915Z",
-      "ticker": "KXHIGHLAX-26AUG15-B74.5",
-      "city": "Los Angeles",
-      "model_prob": 0.17499628318108879,
-      "market_prob": 0.04,
-      "edge_pp": 8.499628318108877,
-      "side": "yes",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 4.6h to close < 6h,size_zero"
-    },
-    {
-      "ts": "2026-08-16T03:26:01.889Z",
-      "ticker": "KXHIGHLAX-26AUG15-B76.5",
-      "city": "Los Angeles",
-      "model_prob": 0.1658911714892477,
-      "market_prob": 0.88,
-      "edge_pp": 66.41088285107523,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate1_liquidity: counterparty depth 10 < 20,gate5_settlement: 4.6h to close < 6h"
-    },
-    {
-      "ts": "2026-08-16T03:26:01.863Z",
-      "ticker": "KXHIGHLAX-26AUG15-B78.5",
-      "city": "Los Angeles",
-      "model_prob": 0.12948866061109843,
-      "market_prob": 0.41,
-      "edge_pp": 23.051133938890153,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate5_settlement: 4.6h to close < 6h"
     }
   ],
   "recent_orders": [
