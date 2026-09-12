@@ -1,10 +1,17 @@
 {
-  "generated_at": "2026-09-12T15:58:58.989Z",
+  "generated_at": "2026-09-12T18:07:46.376Z",
   "mode": "simulation",
-  "bankroll_usd": 17.090000000000586,
+  "bankroll_usd": 16.790000000000585,
   "realized_pnl_today_usd": -0.9,
   "realized_pnl_total_usd": -982.6800000000005,
   "open_positions": [
+    {
+      "ticker": "KXHIGHNY-26SEP13-T78",
+      "side": "yes",
+      "contracts": 1,
+      "price_cents": 30,
+      "entry_ts": "2026-09-12T18:07:44.166Z"
+    },
     {
       "ticker": "KXHIGHMIA-26SEP12-B88.5",
       "side": "no",
@@ -14,6 +21,116 @@
     }
   ],
   "recent_decisions": [
+    {
+      "ts": "2026-09-12T18:07:46.358Z",
+      "ticker": "KXHIGHDEN-26SEP12-B82.5",
+      "city": "Denver",
+      "model_prob": 0.07760818292961857,
+      "market_prob": 0.53,
+      "edge_pp": 40.23918170703814,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:46.340Z",
+      "ticker": "KXHIGHDEN-26SEP12-B84.5",
+      "city": "Denver",
+      "model_prob": 0.04007074264308064,
+      "market_prob": 0.26,
+      "edge_pp": 16.992925735691937,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:46.123Z",
+      "ticker": "KXHIGHMIA-26SEP12-B92.5",
+      "city": "Miami",
+      "model_prob": 0.17125369759003473,
+      "market_prob": 0.27,
+      "edge_pp": 4.874630240996529,
+      "side": "no",
+      "decision": "no_edge",
+      "gate_failures": null
+    },
+    {
+      "ts": "2026-09-12T18:07:44.768Z",
+      "ticker": "KXHIGHLAX-26SEP12-B79.5",
+      "city": "Los Angeles",
+      "model_prob": 0.16299765226121032,
+      "market_prob": 0.09,
+      "edge_pp": 2.299765226121033,
+      "side": "yes",
+      "decision": "no_edge",
+      "gate_failures": null
+    },
+    {
+      "ts": "2026-09-12T18:07:44.750Z",
+      "ticker": "KXHIGHLAX-26SEP12-B81.5",
+      "city": "Los Angeles",
+      "model_prob": 0.12455956620647446,
+      "market_prob": 0.34,
+      "edge_pp": 16.544043379352555,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:44.731Z",
+      "ticker": "KXHIGHLAX-26SEP12-B83.5",
+      "city": "Los Angeles",
+      "model_prob": 0.07837541986513163,
+      "market_prob": 0.45,
+      "edge_pp": 32.16245801348684,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate1_liquidity: counterparty depth 1.92 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:44.542Z",
+      "ticker": "KXHIGHCHI-26SEP12-B86.5",
+      "city": "Chicago",
+      "model_prob": 0.11346157711732252,
+      "market_prob": 0.59,
+      "edge_pp": 42.65384228826775,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:44.328Z",
+      "ticker": "KXHIGHNY-26SEP12-B77.5",
+      "city": "New York",
+      "model_prob": 0.17136416577705738,
+      "market_prob": 0.42,
+      "edge_pp": 19.863583422294262,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:44.310Z",
+      "ticker": "KXHIGHNY-26SEP12-B79.5",
+      "city": "New York",
+      "model_prob": 0.1406579110895878,
+      "market_prob": 0.3,
+      "edge_pp": 10.934208891041218,
+      "side": "no",
+      "decision": "reject",
+      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
+    },
+    {
+      "ts": "2026-09-12T18:07:44.166Z",
+      "ticker": "KXHIGHNY-26SEP13-T78",
+      "city": "New York",
+      "model_prob": 0.48581831518836216,
+      "market_prob": 0.31,
+      "edge_pp": 12.581831518836218,
+      "side": "yes",
+      "decision": "trade",
+      "gate_failures": null
+    },
     {
       "ts": "2026-09-12T15:58:58.961Z",
       "ticker": "KXHIGHDEN-26SEP12-B82.5",
@@ -453,119 +570,19 @@
       "side": "no",
       "decision": "no_edge",
       "gate_failures": null
-    },
-    {
-      "ts": "2026-09-12T04:50:55.487Z",
-      "ticker": "KXHIGHMIA-26SEP11-B88.5",
-      "city": "Miami",
-      "model_prob": 0.17389420477394762,
-      "market_prob": 0.92,
-      "edge_pp": 69.61057952260524,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 8¢ outside [10, 80],gate1_liquidity: counterparty depth 1 < 20,gate5_settlement: 0.2h to close < 6h"
-    },
-    {
-      "ts": "2026-09-12T04:50:55.406Z",
-      "ticker": "KXHIGHMIA-26SEP11-B92.5",
-      "city": "Miami",
-      "model_prob": 0.10330358844985121,
-      "market_prob": 0.04,
-      "edge_pp": 1.3303588449851205,
-      "side": "yes",
-      "decision": "no_edge",
-      "gate_failures": null
-    },
-    {
-      "ts": "2026-09-12T04:50:55.324Z",
-      "ticker": "KXHIGHMIA-26SEP11-T93",
-      "city": "Miami",
-      "model_prob": 0.02,
-      "market_prob": 0.02,
-      "edge_pp": -5,
-      "side": "yes",
-      "decision": "no_edge",
-      "gate_failures": null
-    },
-    {
-      "ts": "2026-09-12T04:50:55.202Z",
-      "ticker": "KXHIGHMIA-26SEP12-B90.5",
-      "city": "Miami",
-      "model_prob": 0.15133564942263011,
-      "market_prob": 0.46,
-      "edge_pp": 25.86643505773699,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
-    },
-    {
-      "ts": "2026-09-12T04:50:55.161Z",
-      "ticker": "KXHIGHMIA-26SEP12-B92.5",
-      "city": "Miami",
-      "model_prob": 0.10785151215524591,
-      "market_prob": 0.27,
-      "edge_pp": 11.21484878447541,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,size_zero"
-    },
-    {
-      "ts": "2026-09-12T04:50:54.917Z",
-      "ticker": "KXHIGHLAX-26SEP11-B84.5",
-      "city": "Los Angeles",
-      "model_prob": 0.17366892164591569,
-      "market_prob": 0.905,
-      "edge_pp": 68.13310783540842,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate5_settlement: 3.2h to close < 6h"
-    },
-    {
-      "ts": "2026-09-12T04:50:54.836Z",
-      "ticker": "KXHIGHLAX-26SEP11-T85",
-      "city": "Los Angeles",
-      "model_prob": 0.12534904977108574,
-      "market_prob": 0.11,
-      "edge_pp": -3.465095022891426,
-      "side": "yes",
-      "decision": "no_edge",
-      "gate_failures": null
-    },
-    {
-      "ts": "2026-09-12T04:50:54.713Z",
-      "ticker": "KXHIGHLAX-26SEP12-B81.5",
-      "city": "Los Angeles",
-      "model_prob": 0.08113856376894713,
-      "market_prob": 0.335,
-      "edge_pp": 20.38614362310529,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate1_liquidity: counterparty depth 5 < 20,size_zero"
-    },
-    {
-      "ts": "2026-09-12T04:50:54.672Z",
-      "ticker": "KXHIGHLAX-26SEP12-B83.5",
-      "city": "Los Angeles",
-      "model_prob": 0.04255008740775379,
-      "market_prob": 0.45,
-      "edge_pp": 35.74499125922462,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate1_liquidity: counterparty depth 3 < 20,size_zero"
-    },
-    {
-      "ts": "2026-09-12T04:50:54.551Z",
-      "ticker": "KXHIGHCHI-26SEP11-B76.5",
-      "city": "Chicago",
-      "model_prob": 0.12017323181882689,
-      "market_prob": 0.9,
-      "edge_pp": 72.98267681811731,
-      "side": "no",
-      "decision": "reject",
-      "gate_failures": "gate0a_extreme_price: limit 100¢ outside [10, 80],gate1_liquidity: counterparty depth 0 < 20,gate5_settlement: 1.2h to close < 6h,size_zero"
     }
   ],
   "recent_orders": [
+    {
+      "ts": "2026-09-12T18:07:44.166Z",
+      "ticker": "KXHIGHNY-26SEP13-T78",
+      "side": "yes",
+      "action": "buy",
+      "price_cents": 30,
+      "count": 1,
+      "status": "sim",
+      "avg_fill_cents": 30
+    },
     {
       "ts": "2026-09-12T15:58:57.436Z",
       "ticker": "KXHIGHMIA-26SEP12-B88.5",
@@ -1055,16 +1072,6 @@
       "count": 2,
       "status": "sim",
       "avg_fill_cents": 27
-    },
-    {
-      "ts": "2026-08-20T20:55:15.275Z",
-      "ticker": "KXHIGHNY-26AUG20-B80.5",
-      "side": "no",
-      "action": "buy",
-      "price_cents": 67,
-      "count": 1,
-      "status": "sim",
-      "avg_fill_cents": 67
     }
   ],
   "pnl_history": [
